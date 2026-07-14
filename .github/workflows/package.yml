@@ -2,6 +2,11 @@ name: Package Desktop App
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag for manual builds. Leave empty to use build-<run-number>."
+        required: false
+        type: string
   push:
     tags:
       - "v*"
@@ -14,9 +19,48 @@ env:
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
 jobs:
+  prepare-release:
+    name: Prepare GitHub Release
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    outputs:
+      tag_name: ${{ steps.release-meta.outputs.tag_name }}
+
+    steps:
+      - name: Resolve release tag
+        id: release-meta
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_RELEASE_TAG"
+            if [ -z "$tag" ]; then
+              tag="build-${GITHUB_RUN_NUMBER}"
+            fi
+          else
+            tag="$REF_NAME"
+          fi
+
+          echo "tag_name=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.release-meta.outputs.tag_name }}
+        run: |
+          gh release view "$TAG_NAME" >/dev/null 2>&1 || \
+            gh release create "$TAG_NAME" --target "$GITHUB_SHA" --title "$TAG_NAME" --notes "Automated desktop packages."
+
   linux:
     name: Linux x64 packages
     runs-on: ubuntu-22.04
+    needs: prepare-release
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -43,19 +87,26 @@ jobs:
       - name: Build Linux packages
         run: npx electron-builder --linux AppImage deb rpm --x64 --publish never
 
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-x64-packages
-          path: |
-            release/*.AppImage
-            release/*.deb
-            release/*.rpm
-          if-no-files-found: error
+      - name: Upload Linux packages to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
+        run: |
+          shopt -s nullglob
+          files=(release/*.AppImage release/*.deb release/*.rpm)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No Linux package files found."
+            exit 1
+          fi
+
+          gh release upload "$TAG_NAME" "${files[@]}" --clobber
 
   windows:
     name: Windows installers
     runs-on: windows-latest
+    needs: prepare-release
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -77,34 +128,16 @@ jobs:
       - name: Build Windows installers
         run: npx electron-builder --win nsis --x64 --ia32 --publish never
 
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-installers
-          path: release/*.exe
-          if-no-files-found: error
-
-  github-release:
-    name: Attach packages to GitHub Release
-    runs-on: ubuntu-22.04
-    needs:
-      - linux
-      - windows
-    if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download package artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create or update GitHub Release
+      - name: Upload Windows installers to GitHub Release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_NAME: ${{ github.ref_name }}
+          TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
         run: |
-          gh release view "$TAG_NAME" >/dev/null 2>&1 || gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "Automated desktop packages."
-          gh release upload "$TAG_NAME" artifacts/* --clobber
+          $files = Get-ChildItem -Path release -Filter *.exe | ForEach-Object { $_.FullName }
+          if ($files.Count -eq 0) {
+            Write-Error "No Windows installer files found."
+            exit 1
+          }
+
+          gh release upload $env:TAG_NAME @files --clobber
