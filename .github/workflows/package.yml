@@ -30,6 +30,9 @@ jobs:
       tag_name: ${{ steps.release-meta.outputs.tag_name }}
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Resolve release tag
         id: release-meta
         env:
@@ -53,8 +56,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ steps.release-meta.outputs.tag_name }}
         run: |
-          gh release view "$TAG_NAME" >/dev/null 2>&1 || \
-            gh release create "$TAG_NAME" --target "$GITHUB_SHA" --title "$TAG_NAME" --notes "Automated desktop packages."
+          set -euo pipefail
+
+          echo "Repository: $GH_REPO"
+          echo "Release tag: $TAG_NAME"
+
+          if gh release view "$TAG_NAME" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "Release already exists."
+          else
+            gh release create "$TAG_NAME" \
+              --repo "$GH_REPO" \
+              --target "$GITHUB_SHA" \
+              --title "$TAG_NAME" \
+              --notes "Automated desktop packages."
+          fi
 
   linux:
     name: Linux x64 packages
@@ -100,7 +115,7 @@ jobs:
             exit 1
           fi
 
-          gh release upload "$TAG_NAME" "${files[@]}" --clobber
+          gh release upload "$TAG_NAME" "${files[@]}" --repo "$GH_REPO" --clobber
 
   windows:
     name: Windows installers
@@ -141,4 +156,4 @@ jobs:
             exit 1
           }
 
-          gh release upload $env:TAG_NAME @files --clobber
+          gh release upload $env:TAG_NAME @files --repo $env:GH_REPO --clobber
