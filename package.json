@@ -77,7 +77,7 @@
       ],
       "maintainer": "Eric <erickent1995@gmail.com>",
       "category": "Office",
-      "icon": "public/icon.png",
+      "icon": "build/icons",
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "mac": {
