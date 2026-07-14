@@ -1,0 +1,160 @@
+import React, { useState, useEffect, useCallback } from 'react'
+import { Minus, X, Copy, Square } from 'lucide-react'
+import { useStore } from '../store/useStore'
+
+/**
+ * Apple HIG-inspired custom title bar.
+ * - Frameless window with glassmorphism surface
+ * - Window controls (minimize, maximize, close) on the RIGHT
+ * - Draggable title area
+ * - Close dialog: minimize to tray or quit (with remember option)
+ */
+export const TitleBar: React.FC = () => {
+  const [isMaximized, setIsMaximized] = useState(false)
+  const [showCloseDialog, setShowCloseDialog] = useState(false)
+  const [rememberChoice, setRememberChoice] = useState(false)
+  const flushPendingSaves = useStore((state) => state.flushPendingSaves)
+
+  // Listen for maximize/unmaximize events from main process
+  useEffect(() => {
+    window.electronAPI.window.isMaximized().then(setIsMaximized)
+
+    window.electronAPI.window.onMaximizedChanged((maximized) => {
+      setIsMaximized(maximized)
+    })
+
+    window.electronAPI.window.onCloseRequested(() => {
+      setShowCloseDialog(true)
+    })
+
+    window.electronAPI.window.onQuitRequested(() => {
+      void (async () => {
+        const ok = await flushPendingSaves()
+        await window.electronAPI.window.respondToQuitRequest(ok)
+      })()
+    })
+
+    return () => {
+      window.electronAPI.window.removeAllListeners()
+    }
+  }, [flushPendingSaves])
+
+  const handleMinimize = useCallback(async () => {
+    if (!(await flushPendingSaves())) return
+    await window.electronAPI.window.minimize()
+  }, [flushPendingSaves])
+
+  const handleMaximize = useCallback(() => {
+    window.electronAPI.window.maximize()
+  }, [])
+
+  const handleCloseClick = useCallback(async () => {
+    const action = await window.electronAPI.window.getCloseAction()
+    if (action === 'ask') {
+      setShowCloseDialog(true)
+    } else {
+      if (!(await flushPendingSaves())) return
+      await window.electronAPI.window.closeAction(action, false)
+    }
+  }, [flushPendingSaves])
+
+  const handleCloseDialogAction = useCallback(async (action: 'minimize' | 'quit') => {
+    if (!(await flushPendingSaves())) return
+    setShowCloseDialog(false)
+    await window.electronAPI.window.closeAction(action, rememberChoice)
+    setRememberChoice(false)
+  }, [flushPendingSaves, rememberChoice])
+
+  const handleCancelClose = useCallback(() => {
+    setShowCloseDialog(false)
+    setRememberChoice(false)
+  }, [])
+
+  return (
+    <>
+      <div className="title-bar">
+        {/* Left: App title (also draggable area) */}
+        <div className="title-bar-drag">
+          <div className="title-bar-title">
+            <img src="icon.png" alt="ZZ-Note" style={{ width: 18, height: 18 }} />
+            <span>ZZ-Note</span>
+          </div>
+        </div>
+
+        {/* Right: Window controls — kept on the right per user request */}
+        <div className="title-bar-controls">
+          <button
+            className="title-bar-btn title-bar-btn-minimize"
+            onClick={handleMinimize}
+            title="最小化"
+          >
+            <Minus size={14} strokeWidth={1.5} />
+          </button>
+          <button
+            className="title-bar-btn title-bar-btn-maximize"
+            onClick={handleMaximize}
+            title={isMaximized ? '还原' : '最大化'}
+          >
+            {isMaximized
+              ? <Copy size={11} strokeWidth={1.5} />
+              : <Square size={12} strokeWidth={1.6} />
+            }
+          </button>
+          <button
+            className="title-bar-btn title-bar-btn-close"
+            onClick={handleCloseClick}
+            title="关闭"
+          >
+            <X size={15} strokeWidth={1.5} />
+          </button>
+        </div>
+      </div>
+
+      {/* Close confirmation dialog — Apple Sheet style */}
+      {showCloseDialog && (
+        <div className="dialog-overlay" onClick={handleCancelClose}>
+          <div
+            className="close-dialog"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="close-dialog-header">
+              <h3>关闭窗口</h3>
+            </div>
+            <div className="close-dialog-body">
+              <p>请选择关闭窗口后的操作：</p>
+              <div className="close-dialog-actions">
+                <button
+                  className="close-dialog-btn close-dialog-btn-minimize"
+                  onClick={() => handleCloseDialogAction('minimize')}
+                >
+                  <Minus size={18} strokeWidth={1.5} />
+                  <span className="close-dialog-btn-label">最小化到托盘</span>
+                  <span className="close-dialog-btn-desc">窗口隐藏，后台继续运行</span>
+                </button>
+                <button
+                  className="close-dialog-btn close-dialog-btn-quit"
+                  onClick={() => handleCloseDialogAction('quit')}
+                >
+                  <X size={18} strokeWidth={1.5} />
+                  <span className="close-dialog-btn-label">退出应用</span>
+                  <span className="close-dialog-btn-desc">完全关闭应用程序</span>
+                </button>
+              </div>
+              <label className="close-dialog-remember">
+                <input
+                  type="checkbox"
+                  checked={rememberChoice}
+                  onChange={(e) => setRememberChoice(e.target.checked)}
+                />
+                <span>记住我的选择（可在设置中重置）</span>
+              </label>
+            </div>
+            <div className="close-dialog-footer">
+              <button className="btn" onClick={handleCancelClose}>取消</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
