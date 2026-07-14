@@ -12,9 +12,9 @@
     "dev": "vite",
     "build": "vite build",
     "package": "vite build && electron-builder",
-    "package:win": "vite build && electron-builder --win",
+    "package:win": "vite build && electron-builder --win nsis --x64 --ia32",
     "package:mac": "vite build && electron-builder --mac",
-    "package:linux": "vite build && electron-builder --linux"
+    "package:linux": "vite build && electron-builder --linux AppImage deb rpm --x64"
   },
   "dependencies": {
     "@codemirror/commands": "^6.7.1",
@@ -72,14 +72,13 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "rpm"
       ],
       "maintainer": "Eric <erickent1995@gmail.com>",
       "category": "Office",
-      "icon": "public/icon.png"
-    },
-    "deb": {
-      "afterInstall": "build/deb/postinst"
+      "icon": "public/icon.png",
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "mac": {
       "target": [

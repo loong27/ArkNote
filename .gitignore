@@ -1,0 +1,62 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+dist-electron/
+release/
+out/
+
+# Electron Builder
+*.blockmap
+*.AppImage
+*.deb
+*.rpm
+*.exe
+builder-debug.yml
+builder-effective-config.yaml
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Package manager caches
+.npm/
+.yarn/
+.pnpm-store/
+
+# Tool caches
+.cache/
+.vite/
+.eslintcache
+
+# Test coverage
+coverage/
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Local certificates and signing files
+*.p12
+*.pfx
+*.pem
+*.key
+*.crt

@@ -1,0 +1,110 @@
+name: Package Desktop App
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "20"
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+jobs:
+  linux:
+    name: Linux x64 packages
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install Linux packaging tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libfuse2 rpm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer and Electron entry
+        run: npm run build
+
+      - name: Build Linux packages
+        run: npx electron-builder --linux AppImage deb rpm --x64 --publish never
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64-packages
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+          if-no-files-found: error
+
+  windows:
+    name: Windows installers
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer and Electron entry
+        run: npm run build
+
+      - name: Build Windows installers
+        run: npx electron-builder --win nsis --x64 --ia32 --publish never
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers
+          path: release/*.exe
+          if-no-files-found: error
+
+  github-release:
+    name: Attach packages to GitHub Release
+    runs-on: ubuntu-22.04
+    needs:
+      - linux
+      - windows
+    if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG_NAME" >/dev/null 2>&1 || gh release create "$TAG_NAME" --title "$TAG_NAME" --notes "Automated desktop packages."
+          gh release upload "$TAG_NAME" artifacts/* --clobber
