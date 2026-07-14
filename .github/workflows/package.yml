@@ -17,6 +17,7 @@ permissions:
 env:
   NODE_VERSION: "20"
   CSC_IDENTITY_AUTO_DISCOVERY: "false"
+  GH_REPO: ${{ github.repository }}
 
 jobs:
   prepare-release:
