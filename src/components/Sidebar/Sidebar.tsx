@@ -4,6 +4,7 @@ import { useStore } from '../../store/useStore'
 import { DirectoryTree } from './DirectoryTree'
 import { TagList } from './TagList'
 import { RecycleBin } from './RecycleBin'
+import { DefaultAvatar } from '../common/DefaultAvatar'
 import type { SidebarTab } from '../../types'
 
 export const Sidebar: React.FC = () => {
@@ -34,7 +35,7 @@ export const Sidebar: React.FC = () => {
     <div className="sidebar sidebar-shell">
       <nav className="sidebar-rail">
         <div className="sidebar-rail-logo" aria-label="ZZ-Note">
-          <img src="icon.png" alt="ZZ-Note" />
+          <DefaultAvatar alt="ZZ-Note" size={30} />
         </div>
 
         <div className="sidebar-rail-nav">

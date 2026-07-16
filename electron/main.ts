@@ -3,6 +3,17 @@ import path from 'path'
 import { AppConfig } from './services/appConfig'
 import { registerIpcHandlers } from './ipc/handlers'
 
+const APP_ID = 'com.zznote.app'
+const LINUX_WM_CLASS = 'zz-note'
+
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_ID)
+}
+
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('class', LINUX_WM_CLASS)
+}
+
 // Initialize app config (reads data dir from ~/.zz-note-config.json)
 const appConfig = new AppConfig()
 
@@ -11,6 +22,35 @@ let tray: Tray | null = null
 let cleanup: (() => void) | null = null
 let isQuitting = false
 let pendingQuitResolver: ((ok: boolean) => void) | null = null
+
+function getIconPath(size?: 16 | 24): string {
+  const fileName = size
+    ? `${size}x${size}.png`
+    : process.platform === 'win32'
+      ? 'icon.ico'
+      : '512x512.png'
+
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'icons', fileName)
+  }
+
+  if (fileName === 'icon.ico') {
+    return path.join(app.getAppPath(), 'public', fileName)
+  }
+
+  return path.join(app.getAppPath(), 'build', 'icons', fileName)
+}
+
+function loadIcon(size?: 16 | 24) {
+  const iconPath = getIconPath(size)
+  const icon = nativeImage.createFromPath(iconPath)
+
+  if (icon.isEmpty()) {
+    console.error(`Failed to load application icon: ${iconPath}`)
+  }
+
+  return icon
+}
 
 async function requestRendererFlush(reason: 'quit' | 'restart'): Promise<boolean> {
   if (!mainWindow || mainWindow.isDestroyed()) {
@@ -43,8 +83,7 @@ function createWindow() {
   // Remove default application menu entirely
   Menu.setApplicationMenu(null)
 
-  // Load icon.png for window icon
-  const windowIcon = nativeImage.createFromPath(path.join(__dirname, '../../icon.png'))
+  const windowIcon = loadIcon()
 
   mainWindow = new BrowserWindow({
     width: bounds?.width || 1400,
@@ -155,13 +194,8 @@ async function requestRestartFromRenderer() {
 }
 
 function createTray() {
-  // Load the app icon from the project root
-  const iconPath = path.join(__dirname, '../../icon.png')
-  let trayIcon = nativeImage.createFromPath(iconPath)
-
-  // Resize for tray (16x16 on macOS/Windows, 24x24 on Linux)
   const iconSize = process.platform === 'linux' ? 24 : 16
-  trayIcon = trayIcon.resize({ width: iconSize, height: iconSize })
+  const trayIcon = loadIcon(iconSize)
 
   tray = new Tray(trayIcon)
   tray.setToolTip('ZZ-Note')

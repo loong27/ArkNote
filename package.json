@@ -10,11 +10,12 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
-    "package": "vite build && electron-builder",
-    "package:win": "vite build && electron-builder --win nsis --x64 --ia32",
-    "package:mac": "vite build && electron-builder --mac",
-    "package:linux": "vite build && electron-builder --linux AppImage deb rpm --x64"
+    "verify:icons": "node scripts/verify-icons.mjs",
+    "build": "npm run verify:icons && vite build",
+    "package": "npm run build && electron-builder",
+    "package:win": "npm run build && electron-builder --win nsis --x64 --ia32",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:linux": "npm run build && electron-builder --linux AppImage deb rpm --x64"
   },
   "dependencies": {
     "@codemirror/commands": "^6.7.1",
@@ -65,8 +66,12 @@
     ],
     "extraResources": [
       {
-        "from": "public/icon.png",
-        "to": "icon.png"
+        "from": "build/icons",
+        "to": "icons"
+      },
+      {
+        "from": "public/icon.ico",
+        "to": "icons/icon.ico"
       }
     ],
     "linux": {
@@ -77,7 +82,11 @@
       ],
       "maintainer": "Eric <erickent1995@gmail.com>",
       "category": "Office",
+      "executableName": "zz-note",
       "icon": "build/icons",
+      "desktop": {
+        "StartupWMClass": "zz-note"
+      },
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "mac": {

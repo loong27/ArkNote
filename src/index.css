@@ -312,6 +312,22 @@ html, body, #root {
   letter-spacing: -0.01em;
 }
 
+.default-avatar {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  object-fit: cover;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.default-avatar-fallback {
+  color: var(--accent);
+  background: var(--accent-dim);
+  border: 0.5px solid var(--border);
+}
+
 .title-bar-icon {
   color: var(--accent);
   filter: drop-shadow(0 0 8px var(--accent-glow));
@@ -904,7 +920,7 @@ html, body, #root {
   box-shadow: none;
 }
 
-.sidebar-rail-logo img {
+.sidebar-rail-logo .default-avatar {
   width: 30px;
   height: 30px;
   border-radius: 8px;

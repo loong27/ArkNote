@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Minus, X, Copy, Square } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { DefaultAvatar } from './common/DefaultAvatar'
 
 /**
  * Apple HIG-inspired custom title bar.
@@ -76,7 +77,7 @@ export const TitleBar: React.FC = () => {
         {/* Left: App title (also draggable area) */}
         <div className="title-bar-drag">
           <div className="title-bar-title">
-            <img src="icon.png" alt="ZZ-Note" style={{ width: 18, height: 18 }} />
+            <DefaultAvatar alt="ZZ-Note" size={18} />
             <span>ZZ-Note</span>
           </div>
         </div>
