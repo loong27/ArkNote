@@ -202,6 +202,10 @@ export interface ElectronAPI {
     getStatus: () => Promise<SyncStatus>
     getConfig: () => Promise<SyncConfig>
     resolveConflicts: (resolutions: Array<{ file: string; resolution: 'local' | 'remote' }>) => Promise<SyncStatus>
+    onAutoSyncRequested: (callback: () => void) => void
+    respondToAutoSyncRequest: (ok: boolean) => Promise<void>
+    onDataChanged: (callback: () => void) => void
+    removeAllListeners: () => void
   }
   // Trash / Recycle Bin
   trash: {

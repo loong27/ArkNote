@@ -23,9 +23,59 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
   const versionService = new VersionService(fileManager)
   const searchService = new SearchService(fileManager)
   const pdfService = new PdfService()
-  const syncService = new SyncService(dataDir)
   const trashService = new TrashService(fileManager)
   const importService = new ImportService(fileManager)
+  let pendingAutoSyncResolver: ((ok: boolean) => void) | null = null
+  let pendingAutoSyncTimeout: NodeJS.Timeout | null = null
+
+  const reloadDataCaches = () => {
+    fileManager.clearCache()
+    searchService.clearCache()
+    fileManager.loadMetadata()
+    trashService.clearCache()
+  }
+
+  const settleAutoSyncRequest = (ok: boolean) => {
+    if (pendingAutoSyncTimeout) {
+      clearTimeout(pendingAutoSyncTimeout)
+      pendingAutoSyncTimeout = null
+    }
+
+    const resolver = pendingAutoSyncResolver
+    pendingAutoSyncResolver = null
+    resolver?.(ok)
+  }
+
+  const requestRendererFlushForAutoSync = async (): Promise<boolean> => {
+    const win = BrowserWindow.getAllWindows().find(window => !window.isDestroyed())
+    if (!win) return true
+
+    if (pendingAutoSyncResolver) return false
+
+    return new Promise<boolean>(resolve => {
+      pendingAutoSyncResolver = resolve
+      win.webContents.send('sync:auto-requested')
+      pendingAutoSyncTimeout = setTimeout(() => {
+        settleAutoSyncRequest(false)
+      }, 10000)
+    })
+  }
+
+  const syncService = new SyncService(dataDir, {
+    beforeAutoSync: requestRendererFlushForAutoSync,
+    onDataChanged: () => {
+      try {
+        reloadDataCaches()
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) {
+            win.webContents.send('sync:data-changed')
+          }
+        }
+      } catch (error) {
+        console.error('Failed to reload data after sync:', error)
+      }
+    },
+  })
 
   // ========== Auth ==========
 
@@ -49,6 +99,7 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
   ipcMain.handle('auth:lock', async () => {
     noteService.cleanup()
     syncService.cleanup()
+    settleAutoSyncRequest(false)
     fileManager.clearCache()
     searchService.clearCache()
     trashService.clearCache()
@@ -562,6 +613,10 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
     await syncService.configure(config)
   })
 
+  ipcMain.handle('sync:auto-response', async (_event, response: { ok: boolean }) => {
+    settleAutoSyncRequest(response.ok)
+  })
+
   ipcMain.handle('sync:getConfig', async () => {
     return syncService.getConfig() || {
       enabled: false,
@@ -579,16 +634,17 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
   })
 
   ipcMain.handle('sync:push', async () => {
-    return await syncService.push()
+    const result = await syncService.push()
+    if (result.status === 'success') {
+      reloadDataCaches()
+    }
+    return result
   })
 
   ipcMain.handle('sync:pull', async () => {
     const result = await syncService.pull()
     if (result.status === 'success') {
-      fileManager.clearCache()
-      searchService.clearCache()
-      fileManager.loadMetadata()
-      trashService.clearCache()
+      reloadDataCaches()
     }
     return result
   })
@@ -600,10 +656,7 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
   ipcMain.handle('sync:resolveConflicts', async (_event, resolutions: Array<{ file: string; resolution: 'local' | 'remote' }>) => {
     const result = await syncService.resolveConflicts(resolutions)
     if (result.status === 'success') {
-      fileManager.clearCache()
-      searchService.clearCache()
-      fileManager.loadMetadata()
-      trashService.clearCache()
+      reloadDataCaches()
     }
     return result
   })
@@ -612,5 +665,6 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
   return () => {
     noteService.cleanup()
     syncService.cleanup()
+    settleAutoSyncRequest(false)
   }
 }

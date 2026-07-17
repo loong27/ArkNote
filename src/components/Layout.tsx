@@ -39,6 +39,27 @@ export const Layout: React.FC = () => {
     }
   }, [setSidebarWidth])
 
+  useEffect(() => {
+    window.electronAPI.sync.onAutoSyncRequested(() => {
+      void (async () => {
+        const ok = await useStore.getState().flushPendingSaves()
+        await window.electronAPI.sync.respondToAutoSyncRequest(ok)
+      })()
+    })
+
+    window.electronAPI.sync.onDataChanged(() => {
+      void (async () => {
+        const { loadData, refreshCurrentNote } = useStore.getState()
+        await loadData()
+        await refreshCurrentNote()
+      })()
+    })
+
+    return () => {
+      window.electronAPI.sync.removeAllListeners()
+    }
+  }, [])
+
   // Handle sidebar resize
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     e.preventDefault()

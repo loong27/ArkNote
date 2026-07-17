@@ -73,6 +73,17 @@ const api: ElectronAPI = {
     getStatus: () => ipcRenderer.invoke('sync:getStatus'),
     getConfig: () => ipcRenderer.invoke('sync:getConfig'),
     resolveConflicts: (resolutions) => ipcRenderer.invoke('sync:resolveConflicts', resolutions),
+    onAutoSyncRequested: (callback) => {
+      ipcRenderer.on('sync:auto-requested', callback)
+    },
+    respondToAutoSyncRequest: (ok) => ipcRenderer.invoke('sync:auto-response', { ok }),
+    onDataChanged: (callback) => {
+      ipcRenderer.on('sync:data-changed', callback)
+    },
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('sync:auto-requested')
+      ipcRenderer.removeAllListeners('sync:data-changed')
+    },
   },
   trash: {
     list: () => ipcRenderer.invoke('trash:list'),

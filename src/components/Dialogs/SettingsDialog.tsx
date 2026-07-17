@@ -196,7 +196,13 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       const configToSave = { ...syncConfig, enabled: hasGitConfig || hasOssConfig }
       setSyncConfig(configToSave)
       await window.electronAPI.sync.configure(configToSave)
-      setSyncMessage({ type: 'success', text: '同步配置已保存' })
+      const status = await window.electronAPI.sync.getStatus()
+      setSyncStatus(status)
+      setConflicts(status.conflicts ?? [])
+      setSyncMessage({
+        type: status.status === 'error' ? 'error' : 'success',
+        text: status.status === 'error' ? status.message : '同步配置已保存',
+      })
     } catch (error) {
       setSyncMessage({ type: 'error', text: `配置失败: ${error instanceof Error ? error.message : String(error)}` })
     }
@@ -210,6 +216,13 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       const ok = await runAfterPendingSave(async () => {
         const result = await window.electronAPI.sync.push()
         setSyncStatus(result)
+        if (result.status === 'conflict') {
+          setConflicts(result.conflicts ?? [])
+        } else if (result.status === 'success') {
+          setConflicts([])
+          await loadData()
+          await refreshCurrentNote()
+        }
         setSyncMessage({
           type: result.status === 'success' ? 'success' : 'error',
           text: result.message,
@@ -234,6 +247,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
           setConflicts(result.conflicts)
         }
         if (result.status === 'success') {
+          setConflicts([])
           await loadData()
           await refreshCurrentNote()
         }
@@ -268,6 +282,9 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
           await refreshCurrentNote()
           setConflicts([])
           setSyncMessage({ type: 'success', text: '冲突已解决，数据已更新' })
+        } else if (result.status === 'conflict') {
+          setConflicts(result.conflicts ?? [])
+          setSyncMessage({ type: 'error', text: result.message })
         } else {
           setSyncMessage({ type: 'error', text: result.message })
         }
@@ -950,7 +967,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                       ⚠️ 冲突文件 ({conflicts.length})
                     </h4>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
-                      以下文件存在本地与远程版本冲突，请选择要保留的版本：
+                      加密文件无法自动合并，请为每个文件选择要保留的完整版本。未选择的一侧将被覆盖。
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                       {conflicts.map((conflict, index) => (
