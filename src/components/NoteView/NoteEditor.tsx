@@ -1,7 +1,7 @@
-import React, { useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from 'react'
+import React, { useEffect, useRef, useCallback } from 'react'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view'
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
@@ -52,22 +52,14 @@ interface Props {
   content: string
   onChange: (content: string) => void
   onSave: () => void
+  onReady?: (view: EditorView | null) => void
 }
 
-export interface NoteEditorHandle {
-  getEditorView: () => EditorView | null
-}
-
-export const NoteEditor = forwardRef<NoteEditorHandle, Props>(({ content, onChange, onSave }, ref) => {
+export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const currentNote = useStore(s => s.currentNote)
   const theme = useStore(s => s.theme)
-
-  // Expose editor view to parent via ref
-  useImperativeHandle(ref, () => ({
-    getEditorView: () => viewRef.current,
-  }), [])
 
   // Handle image paste
   const handlePaste = useCallback(async (event: ClipboardEvent, view: EditorView) => {
@@ -129,6 +121,7 @@ export const NoteEditor = forwardRef<NoteEditorHandle, Props>(({ content, onChan
           : markdown({ base: markdownLanguage, codeLanguages: languages }),
         theme === 'dark' ? darkTheme : lightTheme,
         keymap.of([
+          indentWithTab,
           ...defaultKeymap,
           ...historyKeymap,
           ...searchKeymap,
@@ -206,8 +199,10 @@ export const NoteEditor = forwardRef<NoteEditorHandle, Props>(({ content, onChan
     })
 
     viewRef.current = view
+    onReady?.(view)
 
     return () => {
+      onReady?.(null)
       view.destroy()
       viewRef.current = null
     }
@@ -231,6 +226,4 @@ export const NoteEditor = forwardRef<NoteEditorHandle, Props>(({ content, onChan
   }, [content])
 
   return <div ref={containerRef} className="editor-container" />
-})
-
-NoteEditor.displayName = 'NoteEditor'
+}

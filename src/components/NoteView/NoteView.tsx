@@ -1,14 +1,19 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { Edit3, Eye, Save, ChevronRight, X } from 'lucide-react'
+import { Columns2, Edit3, Eye, Save, ChevronRight, X } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
-// @ts-ignore - no types for markdown-it-task-lists
+import abbr from 'markdown-it-abbr'
+import deflist from 'markdown-it-deflist'
+import footnote from 'markdown-it-footnote'
+import ins from 'markdown-it-ins'
+import mark from 'markdown-it-mark'
+import sub from 'markdown-it-sub'
+import sup from 'markdown-it-sup'
 import taskLists from 'markdown-it-task-lists'
 import mermaid from 'mermaid'
 import { useStore } from '../../store/useStore'
 import { NoteEditor } from './NoteEditor'
-import type { NoteEditorHandle } from './NoteEditor'
 import { NoteMenu } from './NoteMenu'
 import { SearchInNote } from './SearchInNote'
 import { EditorToolbar } from './EditorToolbar'
@@ -23,8 +28,18 @@ const md = new MarkdownIt({
   breaks: true,
 })
 
-// Add task list support (- [ ] / - [x])
-md.use(taskLists, { enabled: true, label: true, labelAfter: true })
+md
+  .use(taskLists, { enabled: true, label: true, labelAfter: true })
+  .use(footnote)
+  .use(sub)
+  .use(sup)
+  .use(ins)
+  .use(mark)
+  .use(abbr)
+  .use(deflist)
+
+md.renderer.rules.table_open = () => '<div class="markdown-table-wrap"><table>\n'
+md.renderer.rules.table_close = () => '</table></div>\n'
 
 // Initialize mermaid
 mermaid.initialize({
@@ -179,6 +194,7 @@ export const NoteView: React.FC = () => {
 
   const [content, setContent] = useState('')
   const [title, setTitle] = useState('')
+  const [livePreview, setLivePreview] = useState(true)
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const saveInFlightRef = useRef<Promise<void> | null>(null)
   const latestContentRef = useRef('')
@@ -188,8 +204,9 @@ export const NoteView: React.FC = () => {
   const [imagePopupSrc, setImagePopupSrc] = useState<string | null>(null)
   const [imagePopupAlt, setImagePopupAlt] = useState('')
   const previewRef = useRef<HTMLDivElement>(null)
-  const editorRef = useRef<NoteEditorHandle>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+  const showEditor = isEditing && !isTrashNote
+  const showPreview = isTrashNote || !isEditing || livePreview
 
   // Update mermaid theme when app theme changes
   useEffect(() => {
@@ -201,15 +218,9 @@ export const NoteView: React.FC = () => {
     })
   }, [theme])
 
-  // Keep editorViewRef in sync
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (editorRef.current) {
-        editorViewRef.current = editorRef.current.getEditorView()
-      }
-    }, 100)
-    return () => clearInterval(interval)
-  }, [isEditing])
+  const handleEditorReady = useCallback((view: EditorView | null) => {
+    editorViewRef.current = view
+  }, [])
 
   // If it's a trash note, force preview mode
   useEffect(() => {
@@ -233,7 +244,7 @@ export const NoteView: React.FC = () => {
   // Uses a cancellation flag to prevent stale async renders from overwriting newer results.
   // Search highlights are NOT applied here — they are applied via DOM walk in a separate effect.
   useEffect(() => {
-    if (!currentNote || isEditing) return
+    if (!currentNote || !showPreview) return
 
     const cacheKey = getPreviewCacheKey(currentNote.id, content)
     const cachedHtml = getCachedPreviewHtml(cacheKey)
@@ -243,7 +254,7 @@ export const NoteView: React.FC = () => {
     }
 
     let cancelled = false
-    const frame = requestAnimationFrame(() => {
+    const timer = window.setTimeout(() => {
       const renderAsync = async () => {
         let processedContent = content
 
@@ -314,20 +325,20 @@ export const NoteView: React.FC = () => {
       }
 
       renderAsync()
-    })
+    }, isEditing ? 80 : 0)
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(frame)
+      window.clearTimeout(timer)
     }
-  }, [content, currentNote, isEditing])
+  }, [content, currentNote, isEditing, showPreview])
 
   // Apply search highlights via DOM text-node walking.
   // This avoids the HTML-corruption bug where single-char regex queries
   // like /(s)/gi match inside HTML tag names and break the DOM.
   useEffect(() => {
     const preview = previewRef.current
-    if (!preview || isEditing) return
+    if (!preview || !showPreview) return
 
     const existingMarks = preview.querySelectorAll('mark.search-highlight')
     const shouldHighlight = noteSearchVisible && noteSearchQuery && searchHighlights.length > 0
@@ -409,11 +420,11 @@ export const NoteView: React.FC = () => {
         highlights[currentSearchIndex].scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
     }
-  }, [renderedHtml, searchHighlights, currentSearchIndex, isEditing, noteSearchVisible, noteSearchQuery])
+  }, [renderedHtml, searchHighlights, currentSearchIndex, showPreview, noteSearchVisible, noteSearchQuery])
 
   // Render mermaid diagrams after HTML is set
   useEffect(() => {
-    if (!previewRef.current || isEditing) return
+    if (!previewRef.current || !showPreview) return
 
     const renderMermaid = async () => {
       const codeBlocks = previewRef.current?.querySelectorAll('pre > code.language-mermaid')
@@ -463,7 +474,7 @@ export const NoteView: React.FC = () => {
 
     const timer = setTimeout(renderMermaid, 50)
     return () => clearTimeout(timer)
-  }, [renderedHtml, isEditing])
+  }, [renderedHtml, showPreview])
 
   const closeImagePopup = useCallback(() => {
     setImagePopupSrc(null)
@@ -527,7 +538,7 @@ export const NoteView: React.FC = () => {
 
     preview.addEventListener('click', handleClick)
     return () => preview.removeEventListener('click', handleClick)
-  }, [openNote, isEditing])
+  }, [openNote, showPreview])
 
   const flushCurrentNote = useCallback(async () => {
     if (!currentNote || isTrashNote) return
@@ -672,22 +683,17 @@ export const NoteView: React.FC = () => {
     }
   }, [clearSaveError, currentNote, flushCurrentNote, isTrashNote, loadData, markNoteDirty, markSaveFailed])
 
-  // Handle image upload - insert as HTML <img> for resizability
-  const handleImageUpload = useCallback(async () => {
-    if (!currentNote || isTrashNote) return
+  // Select and persist an image. The toolbar inserts it at the current selection.
+  const handleImageUpload = useCallback(async (): Promise<string | null> => {
+    if (!currentNote || isTrashNote) return null
 
     try {
-      const imageId = await window.electronAPI.images.selectAndSave(currentNote.id)
-      if (imageId) {
-        const imageHtml = `\n<img src="zznote://${imageId}" alt="image" width="600" />\n`
-        const newContent = content + imageHtml
-        setContent(newContent)
-        handleContentChange(newContent)
-      }
+      return await window.electronAPI.images.selectAndSave(currentNote.id)
     } catch (error) {
       console.error('Image upload failed:', error)
+      return null
     }
-  }, [currentNote, content, handleContentChange, isTrashNote])
+  }, [currentNote, isTrashNote])
 
   // Handle search highlight results from SearchInNote
   const handleSearchHighlight = useCallback((matches: SearchMatch[], currentIndex: number) => {
@@ -735,11 +741,24 @@ export const NoteView: React.FC = () => {
       {!isTrashNote && (
         <div className="mode-toggle">
           <button
-            className={isEditing ? 'active' : ''}
-            onClick={() => setIsEditing(true)}
+            className={isEditing && !livePreview ? 'active' : ''}
+            onClick={() => {
+              setLivePreview(false)
+              setIsEditing(true)
+            }}
           >
             <Edit3 size={14} strokeWidth={1.5} style={{ marginRight: 4 }} />
             编辑
+          </button>
+          <button
+            className={isEditing && livePreview ? 'active' : ''}
+            onClick={() => {
+              setLivePreview(true)
+              setIsEditing(true)
+            }}
+          >
+            <Columns2 size={14} strokeWidth={1.5} style={{ marginRight: 4 }} />
+            分栏
           </button>
           <button
             className={!isEditing ? 'active' : ''}
@@ -824,20 +843,25 @@ export const NoteView: React.FC = () => {
       <SearchInNote onHighlight={handleSearchHighlight} />
 
       {/* Note body */}
-      <div className={`note-body ${!isEditing || isTrashNote ? 'preview-note-body' : ''}`}>
-        {isEditing && !isTrashNote ? (
-          <NoteEditor
-            ref={editorRef}
-            content={content}
-            onChange={handleContentChange}
-            onSave={handleManualSave}
-          />
-        ) : (
-          <div
-            ref={previewRef}
-            className="markdown-preview"
-            dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-          />
+      <div className={`note-body ${!showEditor ? 'preview-note-body' : ''} ${showEditor && showPreview ? 'split-note-body' : ''}`}>
+        {showEditor && (
+          <div className="note-editor-pane">
+            <NoteEditor
+              content={content}
+              onChange={handleContentChange}
+              onSave={handleManualSave}
+              onReady={handleEditorReady}
+            />
+          </div>
+        )}
+        {showPreview && (
+          <div className="note-preview-pane">
+            <div
+              ref={previewRef}
+              className="markdown-preview"
+              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+            />
+          </div>
         )}
       </div>
 

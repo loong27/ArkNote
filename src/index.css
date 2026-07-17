@@ -1960,18 +1960,48 @@ html, body, #root {
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  min-height: 0;
+}
+
+.note-editor-pane,
+.note-preview-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.note-editor-pane {
+  display: flex;
+}
+
+.note-preview-pane {
+  overflow-y: auto;
+}
+
+.split-note-body {
+  flex-direction: row;
+}
+
+.split-note-body .note-preview-pane {
+  border-left: 0.5px solid var(--border);
 }
 
 /* ================================================================
    MARKDOWN PREVIEW — Apple Typography
    ================================================================ */
 .preview-note-body {
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-.preview-note-body .markdown-preview {
+.note-preview-pane .markdown-preview {
   min-height: 100%;
   overflow: visible;
+}
+
+.split-note-body .markdown-preview {
+  padding: 28px 36px 56px;
 }
 
 .markdown-preview {
@@ -2073,10 +2103,16 @@ html, body, #root {
   margin: 8px 0;
 }
 
+.markdown-table-wrap {
+  width: 100%;
+  margin: 1em 0;
+  overflow-x: auto;
+}
+
 .markdown-preview table {
   border-collapse: collapse;
   width: 100%;
-  margin: 1em 0;
+  margin: 0;
 }
 
 .markdown-preview th, .markdown-preview td {
@@ -2112,6 +2148,49 @@ html, body, #root {
 .markdown-preview input[type="checkbox"] {
   margin-right: 6px;
   accent-color: var(--accent);
+}
+
+.markdown-preview ins {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.markdown-preview sub,
+.markdown-preview sup {
+  line-height: 0;
+}
+
+.markdown-preview abbr[title] {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.markdown-preview dl {
+  margin: 1em 0;
+}
+
+.markdown-preview dt {
+  font-weight: 650;
+  margin-top: 0.8em;
+}
+
+.markdown-preview dd {
+  margin: 0.35em 0 0.8em 1.5em;
+  color: var(--text-secondary);
+}
+
+.markdown-preview .footnotes {
+  margin-top: 2.5em;
+  padding-top: 1em;
+  border-top: 0.5px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 0.9em;
+}
+
+.markdown-preview .footnote-backref {
+  margin-left: 0.35em;
 }
 
 /* Markdown highlight for search */
@@ -3103,6 +3182,21 @@ html, body, #root {
 /* ================================================================
    RESPONSIVE
    ================================================================ */
+@media (max-width: 1050px) {
+  .split-note-body {
+    flex-direction: column;
+  }
+
+  .split-note-body .note-preview-pane {
+    border-left: 0;
+    border-top: 0.5px solid var(--border);
+  }
+
+  .split-note-body .markdown-preview {
+    padding: 24px 40px 48px;
+  }
+}
+
 @media (max-width: 768px) {
   .unlock-card {
     padding: 32px 24px;
@@ -3323,6 +3417,11 @@ html, body, #root {
   color: var(--accent);
 }
 
+.toolbar-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
 .toolbar-btn:active {
   transform: scale(0.92);
   background: var(--bg-surface-active);
@@ -3347,6 +3446,48 @@ html, body, #root {
   z-index: 200;
   min-width: 200px;
   animation: menuAppear 0.15s var(--spring);
+}
+
+.toolbar-popover {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform: none;
+  margin: 0;
+  max-width: calc(100vw - 16px);
+}
+
+.heading-picker-dropdown {
+  min-width: 176px;
+  padding: 6px;
+}
+
+.heading-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.heading-picker-item:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.heading-picker-mark {
+  width: 24px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .color-picker-dropdown {
@@ -3403,6 +3544,7 @@ html, body, #root {
 .table-grid-cell {
   width: 20px;
   height: 20px;
+  padding: 0;
   border: 0.5px solid var(--border);
   border-radius: 3px;
   cursor: pointer;
@@ -3941,6 +4083,10 @@ html[data-theme="light"] .app {
   line-height: 1.78;
 }
 
+[data-theme="light"] .split-note-body .markdown-preview {
+  padding: 32px 40px 72px;
+}
+
 [data-theme="light"] .markdown-preview h1 {
   font-size: 36px;
   line-height: 1.2;
@@ -4011,6 +4157,10 @@ html[data-theme="light"] .app {
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-md);
   overflow: hidden;
+  margin: 0;
+}
+
+[data-theme="light"] .markdown-table-wrap {
   margin: 1.4em 0;
 }
 
@@ -4074,6 +4224,11 @@ html[data-theme="light"] .app {
   max-width: 1120px;
   margin: 0 auto;
   padding: 56px 72px 120px;
+}
+
+[data-theme="light"] .split-note-body .editor-container .cm-editor .cm-content {
+  max-width: none;
+  padding: 32px 40px 80px;
 }
 
 [data-theme="light"] .editor-container .cm-editor .cm-gutters {
