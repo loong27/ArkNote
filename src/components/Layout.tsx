@@ -10,6 +10,7 @@ import { MoveDialog } from './Dialogs/MoveDialog'
 import { TagDialog } from './Dialogs/TagDialog'
 import { VersionDialog } from './Dialogs/VersionDialog'
 import { SettingsDialog } from './Dialogs/SettingsDialog'
+import type { SecurityConfig } from '../types'
 
 export const Layout: React.FC = () => {
   const {
@@ -22,6 +23,10 @@ export const Layout: React.FC = () => {
   const [isResizing, setIsResizing] = useState(false)
   const layoutRef = useRef<HTMLDivElement>(null)
   const sidebarWidthRef = useRef(sidebarWidth)
+  const idleTimerRef = useRef<number | null>(null)
+  const lastActivityRef = useRef(Date.now())
+  const securityConfigRef = useRef<SecurityConfig>({ autoLockMinutes: 15, lockOnMinimize: true })
+  const lockingRef = useRef(false)
 
   useEffect(() => {
     sidebarWidthRef.current = sidebarWidth
@@ -57,6 +62,97 @@ export const Layout: React.FC = () => {
 
     return () => {
       window.electronAPI.sync.removeAllListeners()
+    }
+  }, [])
+
+  useEffect(() => {
+    let disposed = false
+
+    const clearIdleTimer = () => {
+      if (idleTimerRef.current !== null) {
+        window.clearTimeout(idleTimerRef.current)
+        idleTimerRef.current = null
+      }
+    }
+
+    const lockVault = async () => {
+      if (lockingRef.current || useStore.getState().isLocked) return
+      lockingRef.current = true
+      clearIdleTimer()
+
+      try {
+        const { flushPendingSaves, setLocked } = useStore.getState()
+        if (!(await flushPendingSaves())) {
+          lastActivityRef.current = Date.now()
+          scheduleIdleLock()
+          return
+        }
+
+        await window.electronAPI.auth.lock()
+        setLocked(true)
+      } catch (error) {
+        console.error('Failed to lock vault:', error)
+        lastActivityRef.current = Date.now()
+        scheduleIdleLock()
+      } finally {
+        lockingRef.current = false
+      }
+    }
+
+    const scheduleIdleLock = () => {
+      clearIdleTimer()
+      const minutes = securityConfigRef.current.autoLockMinutes
+      if (disposed || minutes <= 0 || useStore.getState().isLocked) return
+
+      const timeoutMs = minutes * 60 * 1000
+      const elapsedMs = Date.now() - lastActivityRef.current
+      idleTimerRef.current = window.setTimeout(() => {
+        void lockVault()
+      }, Math.max(0, timeoutMs - elapsedMs))
+    }
+
+    const recordActivity = () => {
+      const now = Date.now()
+      if (now - lastActivityRef.current < 1000) return
+      lastActivityRef.current = now
+      scheduleIdleLock()
+    }
+
+    const applySecurityConfig = (config: SecurityConfig) => {
+      securityConfigRef.current = config
+      lastActivityRef.current = Date.now()
+      scheduleIdleLock()
+    }
+
+    const handleSecurityConfigChanged = (event: Event) => {
+      applySecurityConfig((event as CustomEvent<SecurityConfig>).detail)
+    }
+
+    window.electronAPI.auth.onLocked(() => {
+      clearIdleTimer()
+      useStore.getState().setLocked(true)
+    })
+
+    window.electronAPI.config.getSecurity()
+      .then((config) => {
+        if (!disposed) applySecurityConfig(config)
+      })
+      .catch((error) => console.error('Failed to load security config:', error))
+
+    const activityEvents: Array<keyof WindowEventMap> = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart']
+    for (const eventName of activityEvents) {
+      window.addEventListener(eventName, recordActivity, { passive: true })
+    }
+    window.addEventListener('zznote:security-config-changed', handleSecurityConfigChanged)
+
+    return () => {
+      disposed = true
+      clearIdleTimer()
+      window.electronAPI.auth.removeAllListeners()
+      for (const eventName of activityEvents) {
+        window.removeEventListener(eventName, recordActivity)
+      }
+      window.removeEventListener('zznote:security-config-changed', handleSecurityConfigChanged)
     }
   }, [])
 

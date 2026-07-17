@@ -15,6 +15,17 @@ export type CloseAction = 'ask' | 'minimize' | 'quit'
 
 export type ThemeMode = 'dark' | 'light'
 
+export interface SecurityConfig {
+  autoLockMinutes: number
+  lockOnMinimize: boolean
+}
+
+export interface StoredAuthThrottle {
+  failedAttempts: number
+  nextAllowedAt: number
+  lastFailureAt: number
+}
+
 export interface AppConfigData {
   /** Path to the encrypted data vault directory */
   dataDir: string
@@ -26,6 +37,12 @@ export interface AppConfigData {
   theme: ThemeMode
   /** Sidebar panel width percentage */
   sidebarWidth: number
+  /** Minutes of inactivity before locking; 0 disables idle locking */
+  autoLockMinutes: number
+  /** Clear the vault key whenever the app is minimized or hidden */
+  lockOnMinimize: boolean
+  /** Per-vault password retry state. This is deterrence, not offline-attack protection. */
+  authThrottle: Record<string, StoredAuthThrottle>
 }
 
 const CONFIG_PATH = path.join(os.homedir(), '.zz-note-config.json')
@@ -52,17 +69,56 @@ export class AppConfig {
           closeAction: parsed.closeAction || 'ask',
           theme: parsed.theme || 'dark',
           sidebarWidth: this.clampSidebarWidth(parsed.sidebarWidth),
+          autoLockMinutes: this.clampAutoLockMinutes(parsed.autoLockMinutes),
+          lockOnMinimize: parsed.lockOnMinimize !== false,
+          authThrottle: this.sanitizeAuthThrottle(parsed.authThrottle),
         }
       }
     } catch (error) {
       console.error('Failed to load app config:', error)
     }
 
-    return { dataDir: DEFAULT_DATA_DIR, closeAction: 'ask', theme: 'dark', sidebarWidth: 15 }
+    return {
+      dataDir: DEFAULT_DATA_DIR,
+      closeAction: 'ask',
+      theme: 'dark',
+      sidebarWidth: 15,
+      autoLockMinutes: 15,
+      lockOnMinimize: true,
+      authThrottle: {},
+    }
   }
 
   private clampSidebarWidth(width: unknown): number {
     return typeof width === 'number' && Number.isFinite(width) ? Math.min(40, Math.max(10, width)) : 15
+  }
+
+  private clampAutoLockMinutes(minutes: unknown): number {
+    if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return 15
+    if (minutes <= 0) return 0
+    return Math.min(240, Math.max(1, Math.round(minutes)))
+  }
+
+  private sanitizeAuthThrottle(value: unknown): Record<string, StoredAuthThrottle> {
+    if (!value || typeof value !== 'object') return {}
+
+    const result: Record<string, StoredAuthThrottle> = {}
+    for (const [key, entry] of Object.entries(value)) {
+      if (!/^[a-f0-9]{64}$/.test(key) || !entry || typeof entry !== 'object') continue
+      const candidate = entry as Partial<StoredAuthThrottle>
+      if (
+        typeof candidate.failedAttempts !== 'number'
+        || typeof candidate.nextAllowedAt !== 'number'
+        || typeof candidate.lastFailureAt !== 'number'
+      ) continue
+
+      result[key] = {
+        failedAttempts: Math.max(0, Math.floor(candidate.failedAttempts)),
+        nextAllowedAt: Math.max(0, candidate.nextAllowedAt),
+        lastFailureAt: Math.max(0, candidate.lastFailureAt),
+      }
+    }
+    return result
   }
 
   /**
@@ -143,6 +199,35 @@ export class AppConfig {
 
   setSidebarWidth(width: number): void {
     this.config.sidebarWidth = this.clampSidebarWidth(width)
+    this.save()
+  }
+
+  getSecurityConfig(): SecurityConfig {
+    return {
+      autoLockMinutes: this.config.autoLockMinutes,
+      lockOnMinimize: this.config.lockOnMinimize,
+    }
+  }
+
+  setSecurityConfig(config: SecurityConfig): SecurityConfig {
+    this.config.autoLockMinutes = this.clampAutoLockMinutes(config.autoLockMinutes)
+    this.config.lockOnMinimize = Boolean(config.lockOnMinimize)
+    this.save()
+    return this.getSecurityConfig()
+  }
+
+  getAuthThrottle(key: string): StoredAuthThrottle | null {
+    return this.config.authThrottle[key] ? { ...this.config.authThrottle[key] } : null
+  }
+
+  setAuthThrottle(key: string, state: StoredAuthThrottle): void {
+    this.config.authThrottle[key] = { ...state }
+    this.save()
+  }
+
+  clearAuthThrottle(key: string): void {
+    if (!this.config.authThrottle[key]) return
+    delete this.config.authThrottle[key]
     this.save()
   }
 

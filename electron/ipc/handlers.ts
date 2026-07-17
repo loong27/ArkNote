@@ -1,7 +1,7 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
 import path from 'path'
 import fs from 'fs'
-import { EncryptionService } from '../services/encryption'
+import { EncryptionService, VaultIntegrityError } from '../services/encryption'
 import { FileManager } from '../services/fileManager'
 import { NoteService } from '../services/noteService'
 import { DirectoryService } from '../services/directoryService'
@@ -13,8 +13,23 @@ import { SyncService } from '../services/syncService'
 import { TrashService } from '../services/trashService'
 import { ImportService } from '../services/importService'
 import { AppConfig } from '../services/appConfig'
+import {
+  AuthAttemptLimiter,
+  createVaultAuthKey,
+  validateNewPassword,
+  validatePasswordInput,
+} from '../services/authSecurity'
 
-export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, restartApp: () => Promise<void>) {
+export interface IpcHandlerController {
+  cleanup: () => void
+  lockVault: () => void
+}
+
+export function registerIpcHandlers(
+  dataDir: string,
+  appConfig: AppConfig,
+  restartApp: () => Promise<void>
+): IpcHandlerController {
   const encryption = new EncryptionService(dataDir)
   const fileManager = new FileManager(dataDir, encryption)
   const noteService = new NoteService(fileManager)
@@ -27,6 +42,7 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
   const importService = new ImportService(fileManager)
   let pendingAutoSyncResolver: ((ok: boolean) => void) | null = null
   let pendingAutoSyncTimeout: NodeJS.Timeout | null = null
+  const authLimiter = new AuthAttemptLimiter(createVaultAuthKey(dataDir), appConfig)
 
   const reloadDataCaches = () => {
     fileManager.clearCache()
@@ -34,6 +50,24 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
     fileManager.loadMetadata()
     trashService.clearCache()
   }
+
+  const rateLimitResult = (retryAfterMs: number, failedAttempts: number) => ({
+    success: false,
+    error: 'rate_limited' as const,
+    message: `尝试次数过多，请在 ${Math.max(1, Math.ceil(retryAfterMs / 1000))} 秒后重试`,
+    retryAfterMs,
+    failedAttempts,
+  })
+
+  const invalidPasswordResult = (retryAfterMs: number, failedAttempts: number) => ({
+    success: false,
+    error: 'invalid_password' as const,
+    message: retryAfterMs > 0
+      ? `密码错误，请在 ${Math.max(1, Math.ceil(retryAfterMs / 1000))} 秒后重试`
+      : '密码错误，请重试',
+    retryAfterMs,
+    failedAttempts,
+  })
 
   const settleAutoSyncRequest = (ok: boolean) => {
     if (pendingAutoSyncTimeout) {
@@ -77,26 +111,7 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
     },
   })
 
-  // ========== Auth ==========
-
-  ipcMain.handle('auth:unlock', async (_event, password: string) => {
-    const isFirstTime = encryption.isFirstTime()
-    const success = await encryption.unlock(password)
-    if (success) {
-      fileManager.ensureDirectories()
-      fileManager.loadMetadata()
-      trashService.ensureTrashDirs()
-
-      // Setup sync if configured
-      const meta = fileManager.getMetadata()
-      if (meta.syncConfig.enabled) {
-        syncService.configure(meta.syncConfig).catch(console.error)
-      }
-    }
-    return { success, isFirstTime }
-  })
-
-  ipcMain.handle('auth:lock', async () => {
+  const lockVault = () => {
     noteService.cleanup()
     syncService.cleanup()
     settleAutoSyncRequest(false)
@@ -104,6 +119,89 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
     searchService.clearCache()
     trashService.clearCache()
     encryption.lock()
+  }
+
+  // ========== Auth ==========
+
+  ipcMain.handle('auth:unlock', async (_event, password: string) => {
+    return authLimiter.runExclusive(async () => {
+      const isFirstTime = encryption.isFirstTime()
+      const throttle = authLimiter.getStatus()
+      if (throttle.retryAfterMs > 0) {
+        return { ...rateLimitResult(throttle.retryAfterMs, throttle.failedAttempts), isFirstTime }
+      }
+
+      const inputValidation = validatePasswordInput(password)
+      if (!inputValidation.valid) {
+        const failed = authLimiter.recordFailure()
+        return { ...invalidPasswordResult(failed.retryAfterMs, failed.failedAttempts), isFirstTime }
+      }
+
+      if (isFirstTime) {
+        const passwordValidation = validateNewPassword(password)
+        if (!passwordValidation.valid) {
+          return {
+            success: false,
+            isFirstTime,
+            error: 'weak_password' as const,
+            message: passwordValidation.message,
+            retryAfterMs: 0,
+            failedAttempts: 0,
+          }
+        }
+      }
+
+      try {
+        const success = await encryption.unlock(password)
+        if (!success) {
+          const failed = authLimiter.recordFailure()
+          return { ...invalidPasswordResult(failed.retryAfterMs, failed.failedAttempts), isFirstTime }
+        }
+
+        fileManager.ensureDirectories()
+        fileManager.loadMetadata()
+        trashService.ensureTrashDirs()
+
+        const meta = fileManager.getMetadata()
+        if (meta.syncConfig.enabled) {
+          syncService.configure(meta.syncConfig).catch(console.error)
+        }
+
+        authLimiter.reset()
+        return {
+          success: true,
+          isFirstTime,
+          retryAfterMs: 0,
+          failedAttempts: 0,
+        }
+      } catch (error) {
+        encryption.lock()
+        if (error instanceof VaultIntegrityError) {
+          return {
+            success: false,
+            isFirstTime,
+            error: 'vault_integrity' as const,
+            message: error.message,
+            retryAfterMs: 0,
+            failedAttempts: throttle.failedAttempts,
+          }
+        }
+        return {
+          success: false,
+          isFirstTime,
+          error: 'unlock_failed' as const,
+          message: '解锁失败，请检查数据目录后重试',
+          retryAfterMs: 0,
+          failedAttempts: throttle.failedAttempts,
+        }
+      }
+    })
+  })
+
+  ipcMain.handle('auth:getUnlockStatus', async () => authLimiter.getStatus())
+
+  ipcMain.handle('auth:lock', async () => {
+    lockVault()
   })
 
   ipcMain.handle('auth:isLocked', async () => {
@@ -115,15 +213,45 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
   })
 
   ipcMain.handle('auth:changePassword', async (_event, oldPassword: string, newPassword: string) => {
-    const success = await encryption.changePassword(oldPassword, newPassword)
-    if (success) {
-      // Reload metadata since the encryption key has changed
+    return authLimiter.runExclusive(async () => {
+      const throttle = authLimiter.getStatus()
+      if (throttle.retryAfterMs > 0) {
+        return rateLimitResult(throttle.retryAfterMs, throttle.failedAttempts)
+      }
+
+      const oldPasswordValidation = validatePasswordInput(oldPassword)
+      const newPasswordValidation = validateNewPassword(newPassword)
+      if (!newPasswordValidation.valid) {
+        return {
+          success: false,
+          error: 'weak_password' as const,
+          message: newPasswordValidation.message,
+          retryAfterMs: 0,
+          failedAttempts: throttle.failedAttempts,
+        }
+      }
+      if (!oldPasswordValidation.valid) {
+        const failed = authLimiter.recordFailure()
+        return invalidPasswordResult(failed.retryAfterMs, failed.failedAttempts)
+      }
+
+      const success = await encryption.changePassword(oldPassword, newPassword)
+      if (!success) {
+        const failed = authLimiter.recordFailure()
+        return invalidPasswordResult(failed.retryAfterMs, failed.failedAttempts)
+      }
+
       fileManager.clearCache()
       searchService.clearCache()
       fileManager.loadMetadata()
       trashService.clearCache()
-    }
-    return success
+      authLimiter.reset()
+      return {
+        success: true,
+        retryAfterMs: 0,
+        failedAttempts: 0,
+      }
+    })
   })
 
   // ========== App Config ==========
@@ -167,13 +295,22 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
   })
 
   ipcMain.handle('config:getAll', async () => {
+    const security = appConfig.getSecurityConfig()
     return {
       dataDir: appConfig.getDataDir(),
       defaultDataDir: AppConfig.getDefaultDataDir(),
       configPath: AppConfig.getConfigPath(),
       theme: appConfig.getTheme(),
       sidebarWidth: appConfig.getSidebarWidth(),
+      autoLockMinutes: security.autoLockMinutes,
+      lockOnMinimize: security.lockOnMinimize,
     }
+  })
+
+  ipcMain.handle('config:getSecurity', async () => appConfig.getSecurityConfig())
+
+  ipcMain.handle('config:setSecurity', async (_event, config) => {
+    return appConfig.setSecurityConfig(config)
   })
 
   ipcMain.handle('config:restartApp', async () => {
@@ -633,16 +770,8 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
     }
   })
 
-  ipcMain.handle('sync:push', async () => {
-    const result = await syncService.push()
-    if (result.status === 'success') {
-      reloadDataCaches()
-    }
-    return result
-  })
-
-  ipcMain.handle('sync:pull', async () => {
-    const result = await syncService.pull()
+  ipcMain.handle('sync:run', async () => {
+    const result = await syncService.sync()
     if (result.status === 'success') {
       reloadDataCaches()
     }
@@ -661,10 +790,10 @@ export function registerIpcHandlers(dataDir: string, appConfig: AppConfig, resta
     return result
   })
 
-  // Return cleanup function
-  return () => {
-    noteService.cleanup()
-    syncService.cleanup()
-    settleAutoSyncRequest(false)
+  return {
+    lockVault,
+    cleanup: () => {
+      lockVault()
+    },
   }
 }

@@ -338,6 +338,65 @@ export const useStore = create<AppState>((set, get) => {
   setLocked: (locked) => {
     if (locked) {
       ;(window as any).__clearImageCache?.()
+      saveCoordinator = null
+      const clearedDerivedData = buildDerivedData([], [], [])
+      set({
+        isLocked: true,
+        directories: [],
+        notes: [],
+        tags: [],
+        currentNote: null,
+        viewMode: 'welcome',
+        sidebarTab: 'files',
+        selectedDirectoryId: null,
+        selectedTagId: null,
+        isTrashNote: false,
+        isEditing: false,
+        expandedDirs: new Set<string>(),
+        noteHistory: [],
+        noteHistoryIndex: -1,
+        noteTabs: [],
+        activeNoteTabId: null,
+        globalSearchQuery: '',
+        globalSearchResults: [],
+        globalSearchDirIds: [],
+        noteSearchQuery: '',
+        noteSearchVisible: false,
+        moveDialogOpen: false,
+        tagDialogOpen: false,
+        versionDialogOpen: false,
+        settingsDialogOpen: false,
+        moveNoteId: null,
+        tagNoteId: null,
+        versionNoteId: null,
+        versions: [],
+        syncConfig: {
+          enabled: false,
+          provider: 'git',
+          repoUrl: '',
+          branch: 'main',
+          ossEndpoint: '',
+          ossBucket: '',
+          ossAccessKey: '',
+          ossSecretKey: '',
+          ossRegion: '',
+          autoSync: false,
+          syncInterval: 30,
+        },
+        syncStatus: {
+          lastSync: null,
+          status: 'idle',
+          message: '',
+        },
+        saveState: {
+          phase: 'idle',
+          noteId: null,
+          errorMessage: null,
+          lastSavedAt: null,
+        },
+        ...clearedDerivedData,
+      })
+      return
     }
     set({ isLocked: locked })
   },

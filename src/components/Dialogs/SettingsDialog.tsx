@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { X, FolderOpen, Key, HardDrive, AlertTriangle, RefreshCw, Monitor, GitBranch, Cloud, ArrowUpFromLine, ArrowDownToLine, CheckCircle, XCircle } from 'lucide-react'
+import { X, FolderOpen, Key, HardDrive, AlertTriangle, RefreshCw, Monitor, GitBranch, Cloud, CheckCircle, XCircle, LockKeyhole, Clock3 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import type { SyncConfig, SyncStatus, SyncConflict } from '../../types'
 
@@ -28,6 +28,12 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
   const [confirmNewPassword, setConfirmNewPassword] = useState('')
   const [pwdMessage, setPwdMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' })
   const [pwdChanging, setPwdChanging] = useState(false)
+  const [pwdRetryUntil, setPwdRetryUntil] = useState(0)
+  const [pwdNow, setPwdNow] = useState(Date.now())
+  const [autoLockMinutes, setAutoLockMinutes] = useState(15)
+  const [lockOnMinimize, setLockOnMinimize] = useState(true)
+  const [securitySaving, setSecuritySaving] = useState(false)
+  const [securityMessage, setSecurityMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' })
 
   // Close behavior state
   const [closeAction, setCloseAction] = useState<'ask' | 'minimize' | 'quit'>('ask')
@@ -59,17 +65,23 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     if (!open) return
     const loadConfig = async () => {
       try {
-        const [config, action, sConfig, sStatus] = await Promise.all([
+        const [config, action, sConfig, sStatus, authStatus] = await Promise.all([
           window.electronAPI.config.getAll(),
           window.electronAPI.window.getCloseAction(),
           window.electronAPI.sync.getConfig(),
           window.electronAPI.sync.getStatus(),
+          window.electronAPI.auth.getUnlockStatus(),
         ])
         setDataDir(config.dataDir)
         setDefaultDataDir(config.defaultDataDir)
         setConfigPath(config.configPath)
         setDirInspectMessage('')
         setCloseAction(action)
+        setAutoLockMinutes(config.autoLockMinutes)
+        setLockOnMinimize(config.lockOnMinimize)
+        const currentTime = Date.now()
+        setPwdNow(currentTime)
+        setPwdRetryUntil(currentTime + authStatus.retryAfterMs)
         setSyncConfig(sConfig)
         setSyncStatus(sStatus)
         if (sStatus.conflicts && sStatus.conflicts.length > 0) {
@@ -81,6 +93,20 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     }
     loadConfig()
   }, [open])
+
+  useEffect(() => {
+    if (pwdRetryUntil <= Date.now()) return
+    const timer = window.setInterval(() => {
+      const currentTime = Date.now()
+      setPwdNow(currentTime)
+      if (currentTime >= pwdRetryUntil) {
+        window.clearInterval(timer)
+      }
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [pwdRetryUntil])
+
+  const pwdRetrySeconds = Math.max(0, Math.ceil((pwdRetryUntil - pwdNow) / 1000))
 
   // Handle data directory change
   const handleInspectDataDir = async (dir: string) => {
@@ -142,8 +168,8 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       setPwdMessage({ type: 'error', text: '请输入新密码' })
       return
     }
-    if (newPassword.length < 6) {
-      setPwdMessage({ type: 'error', text: '新密码长度至少6位' })
+    if (Array.from(newPassword).length < 12) {
+      setPwdMessage({ type: 'error', text: '新密码至少需要 12 个字符' })
       return
     }
     if (newPassword !== confirmNewPassword) {
@@ -159,14 +185,20 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
 
     try {
       const ok = await runAfterPendingSave(async () => {
-        const success = await window.electronAPI.auth.changePassword(oldPassword, newPassword)
-        if (success) {
+        const result = await window.electronAPI.auth.changePassword(oldPassword, newPassword)
+        if (result.success) {
           setPwdMessage({ type: 'success', text: '密码修改成功！所有文件已使用新密码重新加密。' })
+          setPwdRetryUntil(0)
           setOldPassword('')
           setNewPassword('')
           setConfirmNewPassword('')
         } else {
-          setPwdMessage({ type: 'error', text: '当前密码不正确' })
+          setPwdMessage({ type: 'error', text: result.message || '密码修改失败' })
+          if (result.retryAfterMs > 0) {
+            const currentTime = Date.now()
+            setPwdNow(currentTime)
+            setPwdRetryUntil(currentTime + result.retryAfterMs)
+          }
         }
       })
       if (!ok) return
@@ -177,6 +209,22 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       })
     } finally {
       setPwdChanging(false)
+    }
+  }
+
+  const handleSaveSecurityConfig = async () => {
+    setSecuritySaving(true)
+    setSecurityMessage({ type: '', text: '' })
+    try {
+      const config = await window.electronAPI.config.setSecurity({ autoLockMinutes, lockOnMinimize })
+      setAutoLockMinutes(config.autoLockMinutes)
+      setLockOnMinimize(config.lockOnMinimize)
+      window.dispatchEvent(new CustomEvent('zznote:security-config-changed', { detail: config }))
+      setSecurityMessage({ type: 'success', text: '安全设置已保存' })
+    } catch (error) {
+      setSecurityMessage({ type: 'error', text: `设置保存失败: ${error instanceof Error ? error.message : String(error)}` })
+    } finally {
+      setSecuritySaving(false)
     }
   }
 
@@ -209,12 +257,12 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     setSyncing(false)
   }
 
-  const handleSyncPush = async () => {
+  const handleSync = async () => {
     setSyncing(true)
     setSyncMessage({ type: '', text: '' })
     try {
       const ok = await runAfterPendingSave(async () => {
-        const result = await window.electronAPI.sync.push()
+        const result = await window.electronAPI.sync.sync()
         setSyncStatus(result)
         if (result.status === 'conflict') {
           setConflicts(result.conflicts ?? [])
@@ -230,35 +278,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       })
       if (!ok) return
     } catch (error) {
-      setSyncMessage({ type: 'error', text: `推送失败: ${error instanceof Error ? error.message : String(error)}` })
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  const handleSyncPull = async () => {
-    setSyncing(true)
-    setSyncMessage({ type: '', text: '' })
-    try {
-      const ok = await runAfterPendingSave(async () => {
-        const result = await window.electronAPI.sync.pull()
-        setSyncStatus(result)
-        if (result.status === 'conflict' && result.conflicts) {
-          setConflicts(result.conflicts)
-        }
-        if (result.status === 'success') {
-          setConflicts([])
-          await loadData()
-          await refreshCurrentNote()
-        }
-        setSyncMessage({
-          type: result.status === 'success' ? 'success' : 'error',
-          text: result.message,
-        })
-      })
-      if (!ok) return
-    } catch (error) {
-      setSyncMessage({ type: 'error', text: `拉取失败: ${error instanceof Error ? error.message : String(error)}` })
+      setSyncMessage({ type: 'error', text: `同步失败: ${error instanceof Error ? error.message : String(error)}` })
     } finally {
       setSyncing(false)
     }
@@ -338,7 +358,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             style={{ flex: 'none', padding: '6px 14px', borderBottom: 'none' }}
           >
             <Key size={15} strokeWidth={SW} />
-            <span>修改密码</span>
+            <span>密码与安全</span>
           </button>
           <button
             className={`sidebar-tab ${activeTab === 'sync' ? 'active' : ''}`}
@@ -580,6 +600,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                     <input
                       type="password"
                       value={oldPassword}
+                      maxLength={256}
                       onChange={(e) => { setOldPassword(e.target.value); setPwdMessage({ type: '', text: '' }) }}
                       placeholder="输入当前密码"
                       style={{
@@ -597,11 +618,12 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
 
                   <div>
                     <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                      新密码（至少6位）
+                      新密码（至少 12 个字符）
                     </label>
                     <input
                       type="password"
                       value={newPassword}
+                      maxLength={256}
                       onChange={(e) => { setNewPassword(e.target.value); setPwdMessage({ type: '', text: '' }) }}
                       placeholder="输入新密码"
                       style={{
@@ -624,6 +646,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                     <input
                       type="password"
                       value={confirmNewPassword}
+                      maxLength={256}
                       onChange={(e) => { setConfirmNewPassword(e.target.value); setPwdMessage({ type: '', text: '' }) }}
                       placeholder="再次输入新密码"
                       style={{
@@ -660,10 +683,88 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                 <button
                   className="btn btn-primary"
                   onClick={handleChangePassword}
-                  disabled={pwdChanging}
+                  disabled={pwdChanging || pwdRetrySeconds > 0}
                   style={{ width: '100%', marginTop: 16 }}
                 >
-                  {pwdChanging ? '加密处理中，请稍候...' : '修改密码'}
+                  {pwdChanging
+                    ? '加密处理中，请稍候...'
+                    : pwdRetrySeconds > 0
+                      ? `请在 ${pwdRetrySeconds} 秒后重试`
+                      : '修改密码'}
+                </button>
+              </div>
+
+              <div style={{ marginBottom: 24, paddingTop: 20, borderTop: '0.5px solid var(--border)' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
+                  <LockKeyhole size={16} strokeWidth={SW} />
+                  自动锁定
+                </h4>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '13px', color: 'var(--text-primary)' }}>
+                      <Clock3 size={15} strokeWidth={SW} />
+                      空闲后锁定
+                    </span>
+                    <select
+                      value={autoLockMinutes}
+                      onChange={(event) => {
+                        setAutoLockMinutes(Number(event.target.value))
+                        setSecurityMessage({ type: '', text: '' })
+                      }}
+                      style={{
+                        minWidth: 136,
+                        padding: '8px 10px',
+                        background: 'var(--bg-primary)',
+                        border: '0.5px solid var(--border)',
+                        borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)',
+                        fontSize: '13px',
+                        outline: 'none',
+                      }}
+                    >
+                      <option value={0}>从不</option>
+                      <option value={5}>5 分钟</option>
+                      <option value={15}>15 分钟</option>
+                      <option value={30}>30 分钟</option>
+                      <option value={60}>60 分钟</option>
+                    </select>
+                  </label>
+
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: 'pointer', fontSize: '13px', color: 'var(--text-primary)' }}>
+                    <input
+                      type="checkbox"
+                      checked={lockOnMinimize}
+                      onChange={(event) => {
+                        setLockOnMinimize(event.target.checked)
+                        setSecurityMessage({ type: '', text: '' })
+                      }}
+                      style={{ accentColor: 'var(--accent)' }}
+                    />
+                    最小化或隐藏窗口时锁定
+                  </label>
+                </div>
+
+                {securityMessage.text && (
+                  <div style={{
+                    marginTop: 12,
+                    padding: '10px 14px',
+                    borderRadius: 'var(--radius-md)',
+                    background: securityMessage.type === 'success' ? '#a6e3a122' : '#f38ba822',
+                    color: securityMessage.type === 'success' ? 'var(--success)' : 'var(--error)',
+                    fontSize: '13px',
+                  }}>
+                    {securityMessage.text}
+                  </div>
+                )}
+
+                <button
+                  className="btn"
+                  onClick={handleSaveSecurityConfig}
+                  disabled={securitySaving}
+                  style={{ width: '100%', marginTop: 14 }}
+                >
+                  {securitySaving ? '保存中...' : '保存安全设置'}
                 </button>
               </div>
 
@@ -904,26 +1005,15 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                 <h4 style={{ fontSize: '14px', marginBottom: 12, color: 'var(--text-primary)' }}>
                   同步操作
                 </h4>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  <button
-                    className="btn"
-                    onClick={handleSyncPull}
-                    disabled={syncing}
-                    style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}
-                  >
-                    <ArrowDownToLine size={14} strokeWidth={1.5} />
-                    {syncing ? '同步中...' : '从远程拉取'}
-                  </button>
-                  <button
-                    className="btn"
-                    onClick={handleSyncPush}
-                    disabled={syncing}
-                    style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}
-                  >
-                    <ArrowUpFromLine size={14} strokeWidth={1.5} />
-                    {syncing ? '同步中...' : '推送到远程'}
-                  </button>
-                </div>
+                <button
+                  className="btn"
+                  onClick={handleSync}
+                  disabled={syncing}
+                  style={{ width: '100%', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}
+                >
+                  <RefreshCw size={14} strokeWidth={1.5} className={syncing ? 'spin' : ''} />
+                  {syncing ? '同步中...' : '立即同步'}
+                </button>
 
                 {/* Sync status */}
                 <div style={{

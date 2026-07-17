@@ -18,6 +18,13 @@ type PasswordChangeManifest = {
   files: string[]
 }
 
+export class VaultIntegrityError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'VaultIntegrityError'
+  }
+}
+
 export class EncryptionService {
   private key: Buffer | null = null
   private salt: Buffer | null = null
@@ -49,7 +56,13 @@ export class EncryptionService {
       if (fs.existsSync(saltPath)) {
         // Existing vault - read salt
         this.salt = fs.readFileSync(saltPath)
+        if (this.salt.length !== SALT_LENGTH) {
+          throw new VaultIntegrityError('密码盐文件已损坏，请从备份恢复 salt.bin')
+        }
       } else {
+        if (this.hasExistingVaultData()) {
+          throw new VaultIntegrityError('检测到加密数据但缺少 salt.bin，请从备份恢复后再解锁')
+        }
         // New vault - generate salt
         this.salt = crypto.randomBytes(SALT_LENGTH)
         this.writeFileAtomic(saltPath, this.salt)
@@ -67,22 +80,27 @@ export class EncryptionService {
       } else {
         // Verify password by trying to decrypt verification file
         if (!fs.existsSync(verifyPath)) {
-          // Fallback: if verify file doesn't exist but salt does, create it
-          const verifyData = this.encrypt(Buffer.from(VERIFY_TEXT))
-          this.writeFileAtomic(verifyPath, verifyData)
-          return true
+          this.clearKey()
+          throw new VaultIntegrityError('密码验证文件缺失，请从备份恢复 verify.enc')
         }
         try {
           const verifyEnc = fs.readFileSync(verifyPath)
+          if (verifyEnc.length < IV_LENGTH + TAG_LENGTH + 1) {
+            throw new VaultIntegrityError('密码验证文件已损坏，请从备份恢复 verify.enc')
+          }
           const decrypted = this.decrypt(verifyEnc)
-          return decrypted.toString('utf-8') === VERIFY_TEXT
-        } catch {
-          this.key = null
+          const matches = decrypted.toString('utf-8') === VERIFY_TEXT
+          decrypted.fill(0)
+          if (!matches) this.clearKey()
+          return matches
+        } catch (error) {
+          this.clearKey()
+          if (error instanceof VaultIntegrityError) throw error
           return false
         }
       }
     } catch (error) {
-      this.key = null
+      this.clearKey()
       throw error
     }
   }
@@ -92,17 +110,14 @@ export class EncryptionService {
    */
   isFirstTime(): boolean {
     const saltPath = path.join(this.dataDir, 'salt.bin')
-    return !fs.existsSync(saltPath)
+    return !fs.existsSync(saltPath) && !this.hasExistingVaultData()
   }
 
   /**
    * Lock the vault - clear the encryption key from memory
    */
   lock(): void {
-    if (this.key) {
-      this.key.fill(0)
-      this.key = null
-    }
+    this.clearKey()
   }
 
   /**
@@ -121,26 +136,32 @@ export class EncryptionService {
     this.passwordChangeInProgress = true
     const originalKey = this.key
     const originalSalt = this.salt
+    let oldKey: Buffer | null = null
+    let newKey: Buffer | null = null
 
     try {
       this.recoverIncompletePasswordChange()
 
       // Verify old password
-      const oldKey = await this.deriveKey(oldPassword, originalSalt)
+      oldKey = await this.deriveKey(oldPassword, originalSalt)
       const verifyPath = path.join(this.dataDir, 'verify.enc')
       const verifyEnc = fs.readFileSync(verifyPath)
       const decrypted = this.decryptWithKey(verifyEnc, oldKey)
+      const matches = decrypted.toString('utf-8') === VERIFY_TEXT
+      decrypted.fill(0)
 
-      if (decrypted.toString('utf-8') !== VERIFY_TEXT) {
+      if (!matches) {
         return false
       }
 
       const newSalt = crypto.randomBytes(SALT_LENGTH)
-      const newKey = await this.deriveKey(newPassword, newSalt)
+      newKey = await this.deriveKey(newPassword, newSalt)
 
       this.reEncryptAllFilesTransactionally(oldKey, newSalt, newKey)
       this.salt = newSalt
       this.key = newKey
+      newKey = null
+      originalKey.fill(0)
 
       return true
     } catch (error) {
@@ -154,6 +175,8 @@ export class EncryptionService {
       console.error('Password change failed:', error)
       return false
     } finally {
+      oldKey?.fill(0)
+      newKey?.fill(0)
       this.passwordChangeInProgress = false
     }
   }
@@ -228,6 +251,22 @@ export class EncryptionService {
         if (err) reject(err)
         else resolve(key)
       })
+    })
+  }
+
+  private clearKey(): void {
+    if (!this.key) return
+    this.key.fill(0)
+    this.key = null
+  }
+
+  private hasExistingVaultData(): boolean {
+    const files = ['verify.enc', 'metadata.json.enc']
+    if (files.some(file => fs.existsSync(path.join(this.dataDir, file)))) return true
+
+    return ['notes', 'images', 'versions', 'trash'].some((directory) => {
+      const fullPath = path.join(this.dataDir, directory)
+      return fs.existsSync(fullPath) && fs.readdirSync(fullPath).length > 0
     })
   }
 
@@ -335,7 +374,11 @@ export class EncryptionService {
     for (const relPath of files) {
       const encrypted = fs.readFileSync(this.resolveInDataDir(relPath))
       const decrypted = this.decryptWithKey(encrypted, oldKey)
-      this.writeFileAtomic(this.resolveInBase(stagedDir, relPath), this.encryptWithKey(decrypted, newKey))
+      try {
+        this.writeFileAtomic(this.resolveInBase(stagedDir, relPath), this.encryptWithKey(decrypted, newKey))
+      } finally {
+        decrypted.fill(0)
+      }
     }
 
     this.writeFileAtomic(path.join(stagedDir, 'salt.bin'), newSalt)
@@ -344,12 +387,15 @@ export class EncryptionService {
 
   private validateStagedFiles(stagedDir: string, files: string[], newKey: Buffer): void {
     const verify = this.decryptWithKey(fs.readFileSync(path.join(stagedDir, 'verify.enc')), newKey)
-    if (verify.toString('utf-8') !== VERIFY_TEXT) {
+    const verifyMatches = verify.toString('utf-8') === VERIFY_TEXT
+    verify.fill(0)
+    if (!verifyMatches) {
       throw new Error('Staged verification file is invalid')
     }
 
     for (const relPath of files) {
-      this.decryptWithKey(fs.readFileSync(this.resolveInBase(stagedDir, relPath)), newKey)
+      const decrypted = this.decryptWithKey(fs.readFileSync(this.resolveInBase(stagedDir, relPath)), newKey)
+      decrypted.fill(0)
     }
   }
 

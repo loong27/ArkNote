@@ -93,6 +93,32 @@ export interface SyncStatus {
   conflicts?: SyncConflict[]
 }
 
+export type AuthErrorCode =
+  | 'invalid_password'
+  | 'rate_limited'
+  | 'weak_password'
+  | 'vault_integrity'
+  | 'unlock_failed'
+
+export interface AuthResult {
+  success: boolean
+  isFirstTime?: boolean
+  error?: AuthErrorCode
+  message?: string
+  retryAfterMs: number
+  failedAttempts: number
+}
+
+export interface AuthThrottleStatus {
+  retryAfterMs: number
+  failedAttempts: number
+}
+
+export interface SecurityConfig {
+  autoLockMinutes: number
+  lockOnMinimize: boolean
+}
+
 // ========== Metadata Store (persisted encrypted) ==========
 
 export interface AppMetadata {
@@ -142,11 +168,14 @@ export interface TreeNode {
 export interface ElectronAPI {
   // Auth
   auth: {
-    unlock: (password: string) => Promise<{ success: boolean; isFirstTime: boolean }>
+    unlock: (password: string) => Promise<AuthResult>
     lock: () => Promise<void>
     isLocked: () => Promise<boolean>
     isFirstTime: () => Promise<boolean>
-    changePassword: (oldPassword: string, newPassword: string) => Promise<boolean>
+    getUnlockStatus: () => Promise<AuthThrottleStatus>
+    changePassword: (oldPassword: string, newPassword: string) => Promise<AuthResult>
+    onLocked: (callback: () => void) => void
+    removeAllListeners: () => void
   }
   // Notes
   notes: {
@@ -197,8 +226,7 @@ export interface ElectronAPI {
   // Sync
   sync: {
     configure: (config: SyncConfig) => Promise<void>
-    push: () => Promise<SyncStatus>
-    pull: () => Promise<SyncStatus>
+    sync: () => Promise<SyncStatus>
     getStatus: () => Promise<SyncStatus>
     getConfig: () => Promise<SyncConfig>
     resolveConflicts: (resolutions: Array<{ file: string; resolution: 'local' | 'remote' }>) => Promise<SyncStatus>
@@ -228,12 +256,22 @@ export interface ElectronAPI {
     setDataDir: (newDir: string) => Promise<{ success: boolean; message: string }>
     selectDataDir: () => Promise<string | null>
     inspectDataDir: (dir: string) => Promise<{ mode: 'current' | 'switch' | 'migrate'; message: string }>
-    getAll: () => Promise<{ dataDir: string; defaultDataDir: string; configPath: string; theme: 'dark' | 'light'; sidebarWidth: number }>
+    getAll: () => Promise<{
+      dataDir: string
+      defaultDataDir: string
+      configPath: string
+      theme: 'dark' | 'light'
+      sidebarWidth: number
+      autoLockMinutes: number
+      lockOnMinimize: boolean
+    }>
     restartApp: () => Promise<void>
     getTheme: () => Promise<'dark' | 'light'>
     setTheme: (theme: 'dark' | 'light') => Promise<void>
     getSidebarWidth: () => Promise<number>
     setSidebarWidth: (width: number) => Promise<void>
+    getSecurity: () => Promise<SecurityConfig>
+    setSecurity: (config: SecurityConfig) => Promise<SecurityConfig>
   }
   // Window Controls
   window: {

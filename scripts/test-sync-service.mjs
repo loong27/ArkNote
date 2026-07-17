@@ -106,10 +106,10 @@ async function run() {
   await serviceB.configure(syncConfig(remote))
 
   writeEncryptedFixture(deviceA, 'device-a-remote-choice')
-  assert.equal((await serviceA.push()).status, 'success')
+  assert.equal((await serviceA.sync()).status, 'success')
 
   writeEncryptedFixture(deviceB, 'device-b-discarded')
-  const remoteConflict = await serviceB.pull()
+  const remoteConflict = await serviceB.sync()
   assert.equal(remoteConflict.status, 'conflict')
   assert.deepEqual(remoteConflict.conflicts?.map(item => item.file), ['metadata.json.enc'])
   assert.equal((await serviceB.resolveConflicts([
@@ -120,9 +120,9 @@ async function run() {
 
   writeEncryptedFixture(deviceB, 'device-b-local-choice')
   writeEncryptedFixture(deviceA, 'device-a-discarded')
-  assert.equal((await serviceA.push()).status, 'success')
+  assert.equal((await serviceA.sync()).status, 'success')
 
-  const localConflict = await serviceB.pull()
+  const localConflict = await serviceB.sync()
   assert.equal(localConflict.status, 'conflict')
   assert.equal((await serviceB.resolveConflicts([
     { file: 'metadata.json.enc', resolution: 'local' },
@@ -130,12 +130,12 @@ async function run() {
   assert.deepEqual(readEncryptedFixture(deviceB), Buffer.from([0, ...Buffer.from('device-b-local-choice')]))
   assertNoGitOperation(deviceB)
 
-  assert.equal((await serviceA.pull()).status, 'success')
+  assert.equal((await serviceA.sync()).status, 'success')
   writeEncryptedFixture(deviceB, 'device-b-modify-before-delete')
   fs.rmSync(path.join(deviceA, 'metadata.json.enc'))
-  assert.equal((await serviceA.push()).status, 'success')
+  assert.equal((await serviceA.sync()).status, 'success')
 
-  const deleteConflict = await serviceB.pull()
+  const deleteConflict = await serviceB.sync()
   assert.equal(deleteConflict.status, 'conflict')
   assert.equal((await serviceB.resolveConflicts([
     { file: 'metadata.json.enc', resolution: 'remote' },
@@ -149,7 +149,7 @@ async function run() {
   const newLocalService = new SyncService(newLocal)
   await newLocalService.configure(syncConfig(existingRemote))
 
-  const unrelatedConflict = await newLocalService.pull()
+  const unrelatedConflict = await newLocalService.sync()
   assert.equal(unrelatedConflict.status, 'conflict', JSON.stringify(unrelatedConflict))
   assert.equal((await newLocalService.resolveConflicts([
     { file: 'metadata.json.enc', resolution: 'local' },
@@ -177,7 +177,7 @@ async function run() {
   const legacyService = new SyncService(legacyB)
   await legacyService.configure(syncConfig(legacyRemote))
   assert.equal(fs.existsSync(path.join(legacyB, '.git', 'rebase-merge')), false)
-  const recoveredConflict = await legacyService.pull()
+  const recoveredConflict = await legacyService.sync()
   assert.equal(recoveredConflict.status, 'conflict')
   assert.equal((await legacyService.resolveConflicts([
     { file: 'metadata.json.enc', resolution: 'local' },

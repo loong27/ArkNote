@@ -16,6 +16,8 @@ export const PasswordDialog: React.FC = () => {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [mode, setMode] = useState<Mode>('loading')
+  const [cooldownUntil, setCooldownUntil] = useState(0)
+  const [now, setNow] = useState(Date.now())
 
   const { setLocked, loadData } = useStore()
 
@@ -39,6 +41,12 @@ export const PasswordDialog: React.FC = () => {
         // Check if it's a new vault (no salt.bin)
         const firstTime = await window.electronAPI.auth.isFirstTime()
         setMode(firstTime ? 'setup' : 'unlock')
+        if (!firstTime) {
+          const status = await window.electronAPI.auth.getUnlockStatus()
+          if (status.retryAfterMs > 0) {
+            setCooldownUntil(Date.now() + status.retryAfterMs)
+          }
+        }
       } catch {
         setMode('unlock')
       }
@@ -46,13 +54,36 @@ export const PasswordDialog: React.FC = () => {
     check()
   }, [setLocked, loadData])
 
+  useEffect(() => {
+    if (cooldownUntil <= Date.now()) return
+    const timer = window.setInterval(() => {
+      const currentTime = Date.now()
+      setNow(currentTime)
+      if (currentTime >= cooldownUntil) {
+        window.clearInterval(timer)
+      }
+    }, 250)
+    return () => window.clearInterval(timer)
+  }, [cooldownUntil])
+
+  const cooldownSeconds = Math.max(0, Math.ceil((cooldownUntil - now) / 1000))
+
+  const applyFailure = useCallback((result: { message?: string; retryAfterMs: number }) => {
+    setError(result.message || '操作失败，请重试')
+    if (result.retryAfterMs > 0) {
+      const currentTime = Date.now()
+      setNow(currentTime)
+      setCooldownUntil(currentTime + result.retryAfterMs)
+    }
+  }, [])
+
   const handleSetup = useCallback(async () => {
     if (!password) {
       setError('请设置加密密码')
       return
     }
-    if (password.length < 6) {
-      setError('密码长度至少 6 位')
+    if (Array.from(password).length < 12) {
+      setError('密码至少需要 12 个字符')
       return
     }
     if (password !== confirmPassword) {
@@ -69,15 +100,16 @@ export const PasswordDialog: React.FC = () => {
         await loadData()
         setLocked(false)
       } else {
-        setError('初始化失败，请重试')
+        applyFailure(result)
       }
     } catch {
       setError('初始化失败，请重试')
     }
     setLoading(false)
-  }, [password, confirmPassword, setLocked, loadData])
+  }, [password, confirmPassword, setLocked, loadData, applyFailure])
 
   const handleUnlock = useCallback(async () => {
+    if (loading || cooldownSeconds > 0) return
     if (!password) {
       setError('请输入密码')
       return
@@ -92,16 +124,17 @@ export const PasswordDialog: React.FC = () => {
         await loadData()
         setLocked(false)
       } else {
-        setError('密码错误，请重试')
+        applyFailure(result)
       }
     } catch {
       setError('解锁失败，请重试')
     }
     setLoading(false)
-  }, [password, setLocked, loadData])
+  }, [password, setLocked, loadData, loading, cooldownSeconds, applyFailure])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
+      if (loading || cooldownSeconds > 0) return
       if (mode === 'setup') {
         handleSetup()
       } else {
@@ -160,13 +193,14 @@ export const PasswordDialog: React.FC = () => {
                 textAlign: 'left',
                 letterSpacing: '0.02em',
               }}>
-                设置密码（至少 6 位）
+                设置密码（至少 12 个字符）
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   placeholder="输入密码"
                   value={password}
+                  maxLength={256}
                   onChange={(e) => { setPassword(e.target.value); setError('') }}
                   onKeyDown={handleKeyDown}
                   autoFocus
@@ -196,6 +230,7 @@ export const PasswordDialog: React.FC = () => {
                 type={showPassword ? 'text' : 'password'}
                 placeholder="再次输入密码"
                 value={confirmPassword}
+                maxLength={256}
                 onChange={(e) => { setConfirmPassword(e.target.value); setError('') }}
                 onKeyDown={handleKeyDown}
               />
@@ -208,17 +243,15 @@ export const PasswordDialog: React.FC = () => {
               <div style={{
                 fontSize: '12px',
                 marginTop: 6,
-                color: password.length >= 6
-                  ? (password.length >= 12 ? 'var(--success)' : 'var(--accent)')
+                color: Array.from(password).length >= 12
+                  ? (Array.from(password).length >= 16 ? 'var(--success)' : 'var(--accent)')
                   : 'var(--error)',
               }}>
-                密码强度: {password.length < 6
+                密码强度: {Array.from(password).length < 12
                   ? '太短'
-                  : password.length < 10
+                  : Array.from(password).length < 16
                     ? '一般'
-                    : password.length < 14
-                      ? '较强'
-                      : '很强'}
+                    : '较强'}
               </div>
             )}
           </div>
@@ -283,6 +316,7 @@ export const PasswordDialog: React.FC = () => {
               type={showPassword ? 'text' : 'password'}
               placeholder="输入密码"
               value={password}
+              maxLength={256}
               onChange={(e) => { setPassword(e.target.value); setError('') }}
               onKeyDown={handleKeyDown}
               autoFocus
@@ -299,8 +333,8 @@ export const PasswordDialog: React.FC = () => {
           {error && <div className="error-msg">{error}</div>}
         </div>
 
-        <button onClick={handleUnlock} disabled={loading}>
-          {loading ? '解锁中...' : '解锁'}
+        <button onClick={handleUnlock} disabled={loading || cooldownSeconds > 0}>
+          {loading ? '解锁中...' : cooldownSeconds > 0 ? `${cooldownSeconds} 秒后重试` : '解锁'}
         </button>
       </div>
     </div>

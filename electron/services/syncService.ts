@@ -3,7 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import type { SyncConfig, SyncStatus, SyncConflict } from '../../src/types'
 
-type SyncAction = 'push' | 'pull' | 'auto'
+type SyncAction = 'manual' | 'auto'
 
 interface SyncServiceOptions {
   beforeAutoSync?: () => Promise<boolean>
@@ -165,18 +165,11 @@ export class SyncService {
     }
   }
 
-  async push(): Promise<SyncStatus> {
+  async sync(): Promise<SyncStatus> {
     const validation = this.validateConfiguration()
     if (validation) return validation
 
-    return this.runExclusive(() => this.gitSynchronize('push'))
-  }
-
-  async pull(): Promise<SyncStatus> {
-    const validation = this.validateConfiguration()
-    if (validation) return validation
-
-    return this.runExclusive(() => this.gitSynchronize('pull'))
+    return this.runExclusive(() => this.gitSynchronize('manual'))
   }
 
   private validateConfiguration(): SyncStatus | null {
@@ -214,20 +207,10 @@ export class SyncService {
       const interruptedStatus = await this.finishOrReportInterruptedOperation(action)
       if (interruptedStatus) return interruptedStatus
 
-      await this.commitLocalChanges(action === 'pull'
-        ? 'ZZ-Note: save local changes before sync'
-        : `ZZ-Note sync: ${new Date().toISOString()}`)
+      await this.commitLocalChanges(`ZZ-Note ${action} sync: ${new Date().toISOString()}`)
 
       const remoteExists = await this.remoteBranchExists(branch)
       if (!remoteExists) {
-        if (action === 'pull') {
-          return {
-            lastSync: null,
-            status: 'error',
-            message: `远程仓库中不存在分支 "${branch}"，请先推送本地数据。`,
-          }
-        }
-
         await this.pushRemote(branch)
         this.conflicts = []
         return this.successStatus(action)
@@ -551,8 +534,7 @@ export class SyncService {
 
   private successStatus(action: SyncAction): SyncStatus {
     const messages: Record<SyncAction, string> = {
-      push: '同步并推送成功',
-      pull: '拉取、合并并同步成功',
+      manual: '同步成功',
       auto: '自动同步成功',
     }
 
@@ -564,9 +546,8 @@ export class SyncService {
   }
 
   private actionLabel(action: SyncAction): string {
-    if (action === 'pull') return '拉取同步'
     if (action === 'auto') return '自动同步'
-    return '推送同步'
+    return '同步'
   }
 
   private formatError(error: unknown): string {

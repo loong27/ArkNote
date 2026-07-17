@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Minus, X, Copy, Square } from 'lucide-react'
+import { Minus, X, Copy, Square, LockKeyhole } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { DefaultAvatar } from './common/DefaultAvatar'
 
@@ -14,6 +14,9 @@ export const TitleBar: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [rememberChoice, setRememberChoice] = useState(false)
+  const [locking, setLocking] = useState(false)
+  const isLocked = useStore((state) => state.isLocked)
+  const setLocked = useStore((state) => state.setLocked)
   const flushPendingSaves = useStore((state) => state.flushPendingSaves)
 
   // Listen for maximize/unmaximize events from main process
@@ -44,6 +47,18 @@ export const TitleBar: React.FC = () => {
     if (!(await flushPendingSaves())) return
     await window.electronAPI.window.minimize()
   }, [flushPendingSaves])
+
+  const handleLock = useCallback(async () => {
+    if (locking || isLocked) return
+    setLocking(true)
+    try {
+      if (!(await flushPendingSaves())) return
+      await window.electronAPI.auth.lock()
+      setLocked(true)
+    } finally {
+      setLocking(false)
+    }
+  }, [flushPendingSaves, isLocked, locking, setLocked])
 
   const handleMaximize = useCallback(() => {
     window.electronAPI.window.maximize()
@@ -84,6 +99,16 @@ export const TitleBar: React.FC = () => {
 
         {/* Right: Window controls — kept on the right per user request */}
         <div className="title-bar-controls">
+          {!isLocked && (
+            <button
+              className="title-bar-btn"
+              onClick={handleLock}
+              disabled={locking}
+              title="锁定笔记库"
+            >
+              <LockKeyhole size={13} strokeWidth={1.5} />
+            </button>
+          )}
           <button
             className="title-bar-btn title-bar-btn-minimize"
             onClick={handleMinimize}

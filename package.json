@@ -1,6 +1,6 @@
 {
   "name": "zz-note",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A secure, cross-platform encrypted note-taking application",
   "author": {
     "name": "Eric",
@@ -11,9 +11,10 @@
   "scripts": {
     "dev": "vite",
     "verify:icons": "node scripts/verify-icons.mjs",
+    "test:auth": "node scripts/test-auth-security.mjs",
     "test:sync": "node scripts/test-sync-service.mjs",
     "test:markdown": "node scripts/test-markdown-renderer.mjs",
-    "build": "npm run verify:icons && npm run test:sync && npm run test:markdown && vite build",
+    "build": "npm run verify:icons && npm run test:auth && npm run test:sync && npm run test:markdown && vite build",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win nsis --x64 --ia32",
     "package:mac": "npm run build && electron-builder --mac",

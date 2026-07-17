@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, Tray, protocol, nativeImage, ipcMain, shell }
 import path from 'path'
 import { AppConfig } from './services/appConfig'
 import { registerIpcHandlers } from './ipc/handlers'
+import type { IpcHandlerController } from './ipc/handlers'
 
 const APP_ID = 'com.zznote.app'
 const LINUX_WM_CLASS = 'zz-note'
@@ -19,9 +20,17 @@ const appConfig = new AppConfig()
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
-let cleanup: (() => void) | null = null
+let ipcController: IpcHandlerController | null = null
 let isQuitting = false
 let pendingQuitResolver: ((ok: boolean) => void) | null = null
+
+async function lockVaultForBackground(): Promise<boolean> {
+  if (!appConfig.getSecurityConfig().lockOnMinimize) return true
+  if (!(await requestRendererFlush('lock'))) return false
+  ipcController?.lockVault()
+  mainWindow?.webContents.send('auth:locked')
+  return true
+}
 
 function getIconPath(size?: 16 | 24): string {
   const fileName = size
@@ -52,7 +61,7 @@ function loadIcon(size?: 16 | 24) {
   return icon
 }
 
-async function requestRendererFlush(reason: 'quit' | 'restart'): Promise<boolean> {
+async function requestRendererFlush(reason: 'quit' | 'restart' | 'lock'): Promise<boolean> {
   if (!mainWindow || mainWindow.isDestroyed()) {
     return true
   }
@@ -63,15 +72,17 @@ async function requestRendererFlush(reason: 'quit' | 'restart'): Promise<boolean
 
     setTimeout(() => {
       if (pendingQuitResolver) {
-        console.warn(`${reason === 'restart' ? 'Restart' : 'Tray quit'} flush timeout, forcing ${reason}`)
+        const action = reason === 'restart' ? 'Restart' : reason === 'lock' ? 'Background lock' : 'Tray quit'
+        console.warn(`${action} flush timeout, ${reason === 'lock' ? 'cancelling lock' : `forcing ${reason}`}`)
         pendingQuitResolver = null
-        resolve(true)
+        resolve(reason !== 'lock')
       }
     }, 10000)
   })
 
   if (!approved) {
-    console.warn(`${reason === 'restart' ? 'Restart' : 'Tray quit'} cancelled because pending saves could not be flushed`)
+    const action = reason === 'restart' ? 'Restart' : reason === 'lock' ? 'Background lock' : 'Tray quit'
+    console.warn(`${action} cancelled because pending saves could not be flushed`)
   }
 
   return approved
@@ -98,7 +109,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
     // Frameless + no shadow for pure custom window
     frame: false,
@@ -122,6 +133,13 @@ function createWindow() {
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://') || url.startsWith('http://')) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
+
   // Handle close button behavior
   mainWindow.on('close', (e) => {
     if (mainWindow) {
@@ -138,7 +156,9 @@ function createWindow() {
     if (closeAction === 'minimize') {
       // User previously chose to minimize to tray
       e.preventDefault()
-      mainWindow?.hide()
+      void lockVaultForBackground().then((locked) => {
+        if (locked) mainWindow?.hide()
+      })
       return
     }
 
@@ -163,6 +183,15 @@ function createWindow() {
 
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  mainWindow.on('minimize', () => {
+    void lockVaultForBackground().then((locked) => {
+      if (!locked) {
+        mainWindow?.restore()
+        mainWindow?.show()
+      }
+    })
   })
 
   // Notify renderer of maximize/unmaximize state changes
@@ -258,13 +287,15 @@ function registerWindowIpc() {
   })
 
   // Called when user chooses action from the close dialog in renderer
-  ipcMain.handle('window:close-action', (_event, action: 'minimize' | 'quit', remember: boolean) => {
+  ipcMain.handle('window:close-action', async (_event, action: 'minimize' | 'quit', remember: boolean) => {
     if (remember) {
       appConfig.setCloseAction(action)
     }
 
     if (action === 'minimize') {
-      mainWindow?.hide()
+      if (await lockVaultForBackground()) {
+        mainWindow?.hide()
+      }
     } else {
       isQuitting = true
       mainWindow?.close()
@@ -299,7 +330,7 @@ app.whenReady().then(() => {
   const dataDir = appConfig.getDataDir()
 
   // Register IPC handlers with configurable data dir
-  cleanup = registerIpcHandlers(dataDir, appConfig, requestRestartFromRenderer)
+  ipcController = registerIpcHandlers(dataDir, appConfig, requestRestartFromRenderer)
 
   // Register window control IPC handlers
   registerWindowIpc()
@@ -323,9 +354,7 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  if (cleanup) {
-    cleanup()
-  }
+  ipcController?.cleanup()
 
   if (process.platform !== 'darwin') {
     app.quit()
@@ -334,7 +363,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
-  if (cleanup) {
-    cleanup()
-  }
+  ipcController?.cleanup()
 })

@@ -7,8 +7,15 @@ const api: ElectronAPI = {
     lock: () => ipcRenderer.invoke('auth:lock'),
     isLocked: () => ipcRenderer.invoke('auth:isLocked'),
     isFirstTime: () => ipcRenderer.invoke('auth:isFirstTime'),
+    getUnlockStatus: () => ipcRenderer.invoke('auth:getUnlockStatus'),
     changePassword: (oldPassword: string, newPassword: string) =>
       ipcRenderer.invoke('auth:changePassword', oldPassword, newPassword),
+    onLocked: (callback) => {
+      ipcRenderer.on('auth:locked', callback)
+    },
+    removeAllListeners: () => {
+      ipcRenderer.removeAllListeners('auth:locked')
+    },
   },
   notes: {
     list: () => ipcRenderer.invoke('notes:list'),
@@ -68,8 +75,7 @@ const api: ElectronAPI = {
   },
   sync: {
     configure: (config) => ipcRenderer.invoke('sync:configure', config),
-    push: () => ipcRenderer.invoke('sync:push'),
-    pull: () => ipcRenderer.invoke('sync:pull'),
+    sync: () => ipcRenderer.invoke('sync:run'),
     getStatus: () => ipcRenderer.invoke('sync:getStatus'),
     getConfig: () => ipcRenderer.invoke('sync:getConfig'),
     resolveConflicts: (resolutions) => ipcRenderer.invoke('sync:resolveConflicts', resolutions),
@@ -111,6 +117,8 @@ const api: ElectronAPI = {
     setTheme: (theme: 'dark' | 'light') => ipcRenderer.invoke('config:setTheme', theme),
     getSidebarWidth: () => ipcRenderer.invoke('config:getSidebarWidth'),
     setSidebarWidth: (width: number) => ipcRenderer.invoke('config:setSidebarWidth', width),
+    getSecurity: () => ipcRenderer.invoke('config:getSecurity'),
+    setSecurity: (config) => ipcRenderer.invoke('config:setSecurity', config),
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
