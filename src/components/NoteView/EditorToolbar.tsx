@@ -285,7 +285,7 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
   const handleImageInsert = async () => {
     const imageId = await onImageUpload()
     if (!imageId) return
-    const text = `\n\n<img src="zznote://${imageId}" alt="图片" width="600" />\n\n`
+    const text = `\n\n<img src="arknote://${imageId}" alt="图片" width="600" />\n\n`
     replaceSelection(text, text.indexOf('图片'), text.indexOf('图片') + 2)
   }
 
@@ -352,7 +352,7 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
   }, [noteById, getDirectoryPathString])
 
   const handleNoteLink = (noteId: string, noteTitle: string) => {
-    replaceSelection(`[${noteTitle}](zznote-link://${noteId})`)
+    replaceSelection(`[${noteTitle}](arknote-link://${noteId})`)
     setActiveDropdown(null)
     setNoteLinkSearch('')
   }

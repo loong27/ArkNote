@@ -8,14 +8,14 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const tempPrefix = path.join(os.tmpdir(), 'zz-note-sync-test-')
+const tempPrefix = path.join(os.tmpdir(), 'ark-note-sync-test-')
 const testRoot = fs.mkdtempSync(tempPrefix)
 const require = createRequire(import.meta.url)
 
-process.env.GIT_AUTHOR_NAME = 'ZZ-Note Test'
-process.env.GIT_AUTHOR_EMAIL = 'zz-note-test@local'
-process.env.GIT_COMMITTER_NAME = 'ZZ-Note Test'
-process.env.GIT_COMMITTER_EMAIL = 'zz-note-test@local'
+process.env.GIT_AUTHOR_NAME = 'arkNote Test'
+process.env.GIT_AUTHOR_EMAIL = 'ark-note-test@local'
+process.env.GIT_COMMITTER_NAME = 'arkNote Test'
+process.env.GIT_COMMITTER_EMAIL = 'ark-note-test@local'
 
 function git(cwd, ...args) {
   return execFileSync('git', args, {
@@ -51,8 +51,8 @@ function createRemote(name, initialValue) {
 
   fs.mkdirSync(seed, { recursive: true })
   git(seed, 'init', '--initial-branch=main')
-  git(seed, 'config', 'user.name', 'ZZ-Note Test')
-  git(seed, 'config', 'user.email', 'zz-note-test@local')
+  git(seed, 'config', 'user.name', 'arkNote Test')
+  git(seed, 'config', 'user.email', 'ark-note-test@local')
   writeEncryptedFixture(seed, initialValue)
   git(seed, 'add', '.')
   git(seed, 'commit', '-m', 'Initial remote data')

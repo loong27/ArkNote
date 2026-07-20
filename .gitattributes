@@ -4,4 +4,5 @@
 # Packaging icons must be regular Git blobs so CI and source builds always have them.
 icon.png -filter -diff -merge -text
 public/icon.png -filter -diff -merge -text
+public/default-avatar.png -filter -diff -merge -text
 build/icons/*.png -filter -diff -merge -text

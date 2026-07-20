@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-const expectedPngSizes = [16, 24, 32, 48, 64, 128, 256, 512]
+const expectedPngSizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024]
 const expectedIcoSizes = [16, 24, 32, 48, 64, 128, 256]
 
 function readAsset(relativePath) {
@@ -57,9 +57,22 @@ function verifyIco(relativePath) {
     const width = data[offset] || 256
     const height = data[offset + 1] || 256
     const bitsPerPixel = data.readUInt16LE(offset + 6)
+    const imageLength = data.readUInt32LE(offset + 8)
+    const imageOffset = data.readUInt32LE(offset + 12)
 
     if (width !== height || bitsPerPixel !== 32) {
       throw new Error(`${relativePath} contains an invalid ${width}x${height} ${bitsPerPixel}-bit entry`)
+    }
+    if (imageOffset + imageLength > data.length) {
+      throw new Error(`${relativePath} contains a truncated ${width}x${height} entry`)
+    }
+
+    const embeddedPng = data.subarray(imageOffset, imageOffset + imageLength)
+    if (!embeddedPng.subarray(0, 8).equals(pngSignature)) {
+      throw new Error(`${relativePath} ${width}x${height} entry is not PNG encoded`)
+    }
+    if (embeddedPng.readUInt32BE(16) !== width || embeddedPng.readUInt32BE(20) !== height) {
+      throw new Error(`${relativePath} ${width}x${height} entry has incorrect PNG dimensions`)
     }
 
     sizes.push(width)
@@ -70,10 +83,22 @@ function verifyIco(relativePath) {
   }
 }
 
-verifyPng('public/icon.png', 512)
+for (const source of ['build/ark-note-icon.svg', 'build/ark-note-avatar.svg']) {
+  if (!readAsset(source).includes(Buffer.from('<svg'))) {
+    throw new Error(`${source} is not a valid SVG source asset`)
+  }
+}
+
+verifyPng('public/icon.png', 1024)
+verifyPng('icon.png', 1024)
+verifyPng('public/default-avatar.png', 512)
 for (const size of expectedPngSizes) {
   verifyPng(`build/icons/${size}x${size}.png`, size)
 }
 verifyIco('public/icon.ico')
+
+if (!readAsset('public/icon.png').equals(readAsset('icon.png'))) {
+  throw new Error('Root and public application icons must be identical')
+}
 
 console.log('Application icon assets are valid.')

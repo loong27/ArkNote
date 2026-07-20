@@ -1,6 +1,6 @@
 {
-  "name": "zz-note",
-  "version": "1.0.2",
+  "name": "ark-note",
+  "version": "1.0.3",
   "description": "A secure, cross-platform encrypted note-taking application",
   "author": {
     "name": "Eric",
@@ -9,12 +9,14 @@
   "private": true,
   "main": "dist-electron/main.js",
   "scripts": {
+    "brand:generate": "node scripts/generate-brand-assets.mjs",
     "dev": "vite",
     "verify:icons": "node scripts/verify-icons.mjs",
+    "test:brand": "node scripts/test-branding.mjs",
     "test:auth": "node scripts/test-auth-security.mjs",
     "test:sync": "node scripts/test-sync-service.mjs",
     "test:markdown": "node scripts/test-markdown-renderer.mjs",
-    "build": "npm run verify:icons && npm run test:auth && npm run test:sync && npm run test:markdown && vite build",
+    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:sync && npm run test:markdown && vite build",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win nsis --x64 --ia32",
     "package:mac": "npm run build && electron-builder --mac",
@@ -59,14 +61,15 @@
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",
     "esbuild": "^0.25.12",
+    "sharp": "^0.34.5",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
     "vite-plugin-electron": "^0.28.8",
     "vite-plugin-electron-renderer": "^0.14.6"
   },
   "build": {
-    "appId": "com.zznote.app",
-    "productName": "ZZ-Note",
+    "appId": "com.arknote.app",
+    "productName": "arkNote",
     "asar": true,
     "directories": {
       "output": "release"
@@ -93,10 +96,10 @@
       ],
       "maintainer": "Eric <erickent1995@gmail.com>",
       "category": "Office",
-      "executableName": "zz-note",
+      "executableName": "ark-note",
       "icon": "build/icons",
       "desktop": {
-        "StartupWMClass": "zz-note"
+        "StartupWMClass": "ark-note"
       },
       "artifactName": "${productName}-${version}-${arch}.${ext}"
     },

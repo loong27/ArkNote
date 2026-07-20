@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { FileManager } from './fileManager'
 import type { NoteMetadata } from '../../src/types'
+import { migrateLegacyBrandReferences } from '../../shared/brand'
 
 export class ImportService {
   private fileManager: FileManager
@@ -14,7 +15,7 @@ export class ImportService {
    * Import a Markdown file into a directory
    */
   importMdFile(filePath: string, directoryId: string): NoteMetadata {
-    const content = fs.readFileSync(filePath, 'utf-8')
+    const content = migrateLegacyBrandReferences(fs.readFileSync(filePath, 'utf-8'))
     const fileName = path.basename(filePath, path.extname(filePath))
     const title = fileName || '导入的笔记'
 
@@ -38,7 +39,7 @@ export class ImportService {
     const mdDir = path.dirname(filePath)
 
     // Find image references and import them
-    const imageRegex = /!\[([^\]]*)\]\((?!https?:\/\/|data:|zznote:\/\/)([^)]+)\)/g
+    const imageRegex = /!\[([^\]]*)\]\((?!https?:\/\/|data:|arknote:\/\/)([^)]+)\)/g
     const matches = [...processedContent.matchAll(imageRegex)]
 
     for (const match of matches) {
@@ -55,7 +56,7 @@ export class ImportService {
           const imageId = this.fileManager.saveImage(imageData, ext)
           processedContent = processedContent.replace(
             match[0],
-            `![${altText}](zznote://${imageId})`
+            `![${altText}](arknote://${imageId})`
           )
         } catch (err) {
           console.error(`Failed to import image ${absoluteImagePath}:`, err)
@@ -64,7 +65,7 @@ export class ImportService {
     }
 
     // Also handle HTML img tags
-    const htmlImgRegex = /<img[^>]+src="(?!https?:\/\/|data:|zznote:\/\/)([^"]+)"[^>]*>/g
+    const htmlImgRegex = /<img[^>]+src="(?!https?:\/\/|data:|arknote:\/\/)([^"]+)"[^>]*>/g
     const htmlMatches = [...processedContent.matchAll(htmlImgRegex)]
 
     for (const match of htmlMatches) {
@@ -80,7 +81,7 @@ export class ImportService {
           const imageId = this.fileManager.saveImage(imageData, ext)
           processedContent = processedContent.replace(
             match[1],
-            `zznote://${imageId}`
+            `arknote://${imageId}`
           )
         } catch (err) {
           console.error(`Failed to import HTML image ${absoluteImagePath}:`, err)
@@ -220,7 +221,7 @@ export class ImportService {
                     if (img.data && img.width > 50 && img.height > 50) {
                       try {
                         const imageId = this.fileManager.saveImage(Buffer.from(img.data), '.png')
-                        markdownContent += `<img src="zznote://${imageId}" alt="PDF image" width="${Math.min(img.width, 600)}" />\n\n`
+                        markdownContent += `<img src="arknote://${imageId}" alt="PDF image" width="${Math.min(img.width, 600)}" />\n\n`
                       } catch (imgErr) {
                         console.error('Failed to save PDF image:', imgErr)
                       }

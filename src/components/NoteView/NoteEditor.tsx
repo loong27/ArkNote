@@ -85,7 +85,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
             )
 
             // Insert image as HTML <img> with width=600 (matching the insert image button)
-            const imageHtml = `\n<img src="zznote://${imageId}" alt="image" width="600" />\n`
+            const imageHtml = `\n<img src="arknote://${imageId}" alt="image" width="600" />\n`
             const pos = view.state.selection.main.head
             view.dispatch({
               changes: { from: pos, insert: imageHtml },

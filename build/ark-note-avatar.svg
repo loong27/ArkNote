@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="avatar-surface" x1="84" y1="60" x2="428" y2="464" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12B8C8"/>
+      <stop offset="0.52" stop-color="#1677E8"/>
+      <stop offset="1" stop-color="#3157C8"/>
+    </linearGradient>
+    <filter id="avatar-shadow" x="86" y="86" width="340" height="356" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="14" stdDeviation="13" flood-color="#073775" flood-opacity="0.3"/>
+    </filter>
+  </defs>
+
+  <circle cx="256" cy="256" r="244" fill="url(#avatar-surface)"/>
+  <circle cx="256" cy="256" r="237" stroke="#FFFFFF" stroke-opacity="0.24" stroke-width="3"/>
+  <path d="M26 337C115 263 191 219 266 191C340 163 410 151 487 149V321C487 424 404 507 301 507H211C119 507 42 440 26 352V337Z" fill="#081B43" fill-opacity="0.12"/>
+
+  <g filter="url(#avatar-shadow)">
+    <path d="M148 360L237.63 153.77C244.57 137.8 267.29 137.75 274.3 153.69L365 360" stroke="#F8FDFF" stroke-width="57" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M198 282H313" stroke="#C9FAF5" stroke-width="39" stroke-linecap="round"/>
+    <path d="M179 369H333" stroke="#F2A65A" stroke-width="23" stroke-linecap="round"/>
+  </g>
+</svg>

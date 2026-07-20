@@ -13,6 +13,7 @@ import { SyncService } from '../services/syncService'
 import { TrashService } from '../services/trashService'
 import { ImportService } from '../services/importService'
 import { AppConfig } from '../services/appConfig'
+import { migrateLegacyBrandReferences } from '../../shared/brand'
 import {
   AuthAttemptLimiter,
   createVaultAuthKey,
@@ -373,10 +374,10 @@ export function registerIpcHandlers(
   // Helper: export a single note MD with images to a target directory
   const exportNoteWithImages = (noteId: string, targetDir: string) => {
     const note = noteService.get(noteId)
-    let content = note.content
+    let content = migrateLegacyBrandReferences(note.content)
 
-    // Find all zznote:// image references
-    const imageRegex = /!\[([^\]]*)\]\(zznote:\/\/([^)]+)\)/g
+    // Find all arkNote image references.
+    const imageRegex = /!\[([^\]]*)\]\(arknote:\/\/([^)]+)\)/g
     const matches = [...content.matchAll(imageRegex)]
 
     if (matches.length > 0) {

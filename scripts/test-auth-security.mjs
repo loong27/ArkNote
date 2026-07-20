@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import os from 'node:os'
@@ -7,7 +8,7 @@ import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const tempPrefix = path.join(os.tmpdir(), 'zz-note-auth-test-')
+const tempPrefix = path.join(os.tmpdir(), 'ark-note-auth-test-')
 const testRoot = fs.mkdtempSync(tempPrefix)
 const require = createRequire(import.meta.url)
 
@@ -163,6 +164,43 @@ async function testEncryptionFailsClosed(encryptionModule) {
   )
 }
 
+async function testLegacyVerifierUpgrade(encryptionModule) {
+  const { EncryptionService } = encryptionModule
+  const password = 'Compatible vault password 2026!'
+  const vaultDir = path.join(testRoot, 'legacy-verifier-vault')
+  const salt = crypto.randomBytes(32)
+  const key = await new Promise((resolve, reject) => {
+    crypto.pbkdf2(password, salt, 600000, 32, 'sha512', (error, derivedKey) => {
+      if (error) reject(error)
+      else resolve(derivedKey)
+    })
+  })
+  const encryptMarker = (marker) => {
+    const iv = crypto.randomBytes(12)
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+    const encrypted = Buffer.concat([cipher.update(Buffer.from(marker)), cipher.final()])
+    return Buffer.concat([iv, cipher.getAuthTag(), encrypted])
+  }
+  const decryptMarker = (data) => {
+    const decipher = crypto.createDecipheriv('aes-256-gcm', key, data.subarray(0, 12))
+    decipher.setAuthTag(data.subarray(12, 28))
+    return Buffer.concat([decipher.update(data.subarray(28)), decipher.final()]).toString('utf8')
+  }
+
+  fs.mkdirSync(vaultDir, { recursive: true })
+  fs.writeFileSync(path.join(vaultDir, 'salt.bin'), salt)
+  fs.writeFileSync(
+    path.join(vaultDir, 'verify.enc'),
+    encryptMarker(`${String.fromCharCode(90, 90)}-NOTE-VERIFY`),
+  )
+
+  const service = new EncryptionService(vaultDir)
+  assert.equal(await service.unlock(password), true)
+  assert.equal(decryptMarker(fs.readFileSync(path.join(vaultDir, 'verify.enc'))), 'ARK-NOTE-VERIFY')
+  service.lock()
+  key.fill(0)
+}
+
 async function run() {
   const auth = await loadModule('electron/services/authSecurity.ts', 'auth-security.cjs')
   const encryption = await loadModule('electron/services/encryption.ts', 'encryption.cjs')
@@ -170,6 +208,7 @@ async function run() {
   await testPasswordPolicy(auth)
   await testAttemptLimiter(auth)
   await testEncryptionFailsClosed(encryption)
+  await testLegacyVerifierUpgrade(encryption)
   console.log('Authentication security tests passed.')
 }
 

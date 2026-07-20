@@ -20,7 +20,7 @@ const COMMON_PASSWORDS = new Set([
   'administrator',
   'letmein123456',
   'iloveyou1234',
-  'zznote123456',
+  'arknote123456',
 ])
 
 export interface AuthThrottleState {

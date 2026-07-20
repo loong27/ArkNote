@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { Lock, Eye, EyeOff, Shield, KeyRound } from 'lucide-react'
+import { Eye, EyeOff, Shield, KeyRound } from 'lucide-react'
 import { useStore } from '../store/useStore'
+import { DefaultAvatar } from './common/DefaultAvatar'
 
 type Mode = 'loading' | 'setup' | 'unlock'
 
@@ -148,8 +149,10 @@ export const PasswordDialog: React.FC = () => {
     return (
       <div className="password-overlay">
         <div className="password-dialog" style={{ textAlign: 'center', padding: '60px 40px' }}>
-          <Lock size={48} color="var(--accent)" strokeWidth={1.5} />
-          <h1 style={{ marginTop: 16 }}>ZZ-Note</h1>
+          <div className="auth-brand-lockup auth-brand-lockup-loading">
+            <DefaultAvatar alt="arkNote" size={72} />
+          </div>
+          <h1>arkNote</h1>
           <p style={{ color: 'var(--text-muted)' }}>正在加载...</p>
         </div>
       </div>
@@ -161,23 +164,14 @@ export const PasswordDialog: React.FC = () => {
     return (
       <div className="password-overlay">
         <div className="password-dialog">
-          {/* Icon circle — Apple-style centered icon */}
-          <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center' }}>
-            <div style={{
-              width: 72,
-              height: 72,
-              borderRadius: '50%',
-              background: 'var(--accent-dim)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              boxShadow: 'inset 0 0 0 0.5px var(--border)',
-            }}>
-              <Shield size={36} color="var(--accent)" strokeWidth={1.5} />
-            </div>
+          <div className="auth-brand-lockup">
+            <DefaultAvatar alt="arkNote" size={72} />
+            <span className="auth-brand-badge" aria-hidden="true">
+              <Shield size={15} strokeWidth={2} />
+            </span>
           </div>
 
-          <h1>欢迎使用 ZZ-Note</h1>
+          <h1>欢迎使用 arkNote</h1>
           <p style={{ marginBottom: 8, lineHeight: 1.6 }}>
             首次使用需要设置加密密码。此密码用于加密所有本地文件，
             <br />请务必<strong style={{ color: 'var(--warning)' }}>牢记密码</strong>，密码丢失将无法恢复数据。
@@ -291,23 +285,14 @@ export const PasswordDialog: React.FC = () => {
   return (
     <div className="password-overlay">
       <div className="password-dialog">
-        {/* Icon circle */}
-        <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'center' }}>
-          <div style={{
-            width: 72,
-            height: 72,
-            borderRadius: '50%',
-            background: 'var(--accent-dim)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: 'inset 0 0 0 0.5px var(--border)',
-          }}>
-            <KeyRound size={36} color="var(--accent)" strokeWidth={1.5} />
-          </div>
+        <div className="auth-brand-lockup">
+          <DefaultAvatar alt="arkNote" size={72} />
+          <span className="auth-brand-badge" aria-hidden="true">
+            <KeyRound size={15} strokeWidth={2} />
+          </span>
         </div>
 
-        <h1>ZZ-Note</h1>
+        <h1>arkNote</h1>
         <p>请输入密码解锁您的笔记</p>
 
         <div className="input-group">

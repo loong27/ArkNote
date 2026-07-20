@@ -8,7 +8,7 @@ interface DefaultAvatarProps {
   style?: React.CSSProperties
 }
 
-const DEFAULT_AVATAR_SRC = new URL('./icon.png', document.baseURI).href
+const DEFAULT_AVATAR_SRC = new URL('./default-avatar.png', document.baseURI).href
 
 export const DefaultAvatar: React.FC<DefaultAvatarProps> = ({
   alt = '默认头像',

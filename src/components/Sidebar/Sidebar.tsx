@@ -34,8 +34,8 @@ export const Sidebar: React.FC = () => {
   return (
     <div className="sidebar sidebar-shell">
       <nav className="sidebar-rail">
-        <div className="sidebar-rail-logo" aria-label="ZZ-Note">
-          <DefaultAvatar alt="ZZ-Note" size={30} />
+        <div className="sidebar-rail-logo" aria-label="arkNote">
+          <DefaultAvatar alt="arkNote" size={30} />
         </div>
 
         <div className="sidebar-rail-nav">

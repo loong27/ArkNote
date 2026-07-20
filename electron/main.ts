@@ -4,8 +4,8 @@ import { AppConfig } from './services/appConfig'
 import { registerIpcHandlers } from './ipc/handlers'
 import type { IpcHandlerController } from './ipc/handlers'
 
-const APP_ID = 'com.zznote.app'
-const LINUX_WM_CLASS = 'zz-note'
+const APP_ID = 'com.arknote.app'
+const LINUX_WM_CLASS = 'ark-note'
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_ID)
@@ -15,7 +15,7 @@ if (process.platform === 'linux') {
   app.commandLine.appendSwitch('class', LINUX_WM_CLASS)
 }
 
-// Initialize app config (reads data dir from ~/.zz-note-config.json)
+// Initialize app config (reads data dir from ~/.ark-note-config.json)
 const appConfig = new AppConfig()
 
 let mainWindow: BrowserWindow | null = null
@@ -103,7 +103,7 @@ function createWindow() {
     y: bounds?.y,
     minWidth: 900,
     minHeight: 600,
-    title: 'ZZ-Note',
+    title: 'arkNote',
     icon: windowIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -227,7 +227,7 @@ function createTray() {
   const trayIcon = loadIcon(iconSize)
 
   tray = new Tray(trayIcon)
-  tray.setToolTip('ZZ-Note')
+  tray.setToolTip('arkNote')
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -259,7 +259,7 @@ function createTray() {
 
 // Register custom protocol for serving encrypted images
 function registerImageProtocol() {
-  protocol.registerBufferProtocol('zznote', async (_request, callback) => {
+  protocol.registerBufferProtocol('arknote', async (_request, callback) => {
     try {
       callback({ statusCode: 404 })
     } catch {

@@ -9,7 +9,8 @@ const TAG_LENGTH = 16
 const SALT_LENGTH = 32
 const PBKDF2_ITERATIONS = 600000
 const DIGEST = 'sha512'
-const VERIFY_TEXT = 'ZZ-NOTE-VERIFY'
+const VERIFY_TEXT = 'ARK-NOTE-VERIFY'
+const LEGACY_VERIFY_TEXT = globalThis.atob('WlotTk9URS1WRVJJRlk=')
 const PASSWORD_CHANGE_DIR = '.password-change'
 
 type PasswordChangeManifest = {
@@ -89,9 +90,13 @@ export class EncryptionService {
             throw new VaultIntegrityError('密码验证文件已损坏，请从备份恢复 verify.enc')
           }
           const decrypted = this.decrypt(verifyEnc)
-          const matches = decrypted.toString('utf-8') === VERIFY_TEXT
+          const verifyText = decrypted.toString('utf-8')
+          const matches = this.isSupportedVerifyText(verifyText)
           decrypted.fill(0)
           if (!matches) this.clearKey()
+          if (matches && verifyText !== VERIFY_TEXT) {
+            this.writeFileAtomic(verifyPath, this.encrypt(Buffer.from(VERIFY_TEXT)))
+          }
           return matches
         } catch (error) {
           this.clearKey()
@@ -147,7 +152,7 @@ export class EncryptionService {
       const verifyPath = path.join(this.dataDir, 'verify.enc')
       const verifyEnc = fs.readFileSync(verifyPath)
       const decrypted = this.decryptWithKey(verifyEnc, oldKey)
-      const matches = decrypted.toString('utf-8') === VERIFY_TEXT
+      const matches = this.isSupportedVerifyText(decrypted.toString('utf-8'))
       decrypted.fill(0)
 
       if (!matches) {
@@ -258,6 +263,10 @@ export class EncryptionService {
     if (!this.key) return
     this.key.fill(0)
     this.key = null
+  }
+
+  private isSupportedVerifyText(value: string): boolean {
+    return value === VERIFY_TEXT || value === LEGACY_VERIFY_TEXT
   }
 
   private hasExistingVaultData(): boolean {

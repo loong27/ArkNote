@@ -219,7 +219,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       const config = await window.electronAPI.config.setSecurity({ autoLockMinutes, lockOnMinimize })
       setAutoLockMinutes(config.autoLockMinutes)
       setLockOnMinimize(config.lockOnMinimize)
-      window.dispatchEvent(new CustomEvent('zznote:security-config-changed', { detail: config }))
+      window.dispatchEvent(new CustomEvent('arknote:security-config-changed', { detail: config }))
       setSecurityMessage({ type: 'success', text: '安全设置已保存' })
     } catch (error) {
       setSecurityMessage({ type: 'error', text: `设置保存失败: ${error instanceof Error ? error.message : String(error)}` })

@@ -143,7 +143,7 @@ export const Layout: React.FC = () => {
     for (const eventName of activityEvents) {
       window.addEventListener(eventName, recordActivity, { passive: true })
     }
-    window.addEventListener('zznote:security-config-changed', handleSecurityConfigChanged)
+    window.addEventListener('arknote:security-config-changed', handleSecurityConfigChanged)
 
     return () => {
       disposed = true
@@ -152,7 +152,7 @@ export const Layout: React.FC = () => {
       for (const eventName of activityEvents) {
         window.removeEventListener(eventName, recordActivity)
       }
-      window.removeEventListener('zznote:security-config-changed', handleSecurityConfigChanged)
+      window.removeEventListener('arknote:security-config-changed', handleSecurityConfigChanged)
     }
   }, [])
 

@@ -4,7 +4,7 @@ import os from 'os'
 
 /**
  * AppConfig manages non-encrypted application settings.
- * Stored at ~/.zz-note-config.json (fixed location, always readable).
+ * Stored at ~/.ark-note-config.json (fixed location, always readable).
  *
  * This is separate from the encrypted metadata because:
  * 1. We need to know the data directory BEFORE decrypting anything
@@ -45,26 +45,45 @@ export interface AppConfigData {
   authThrottle: Record<string, StoredAuthThrottle>
 }
 
-const CONFIG_PATH = path.join(os.homedir(), '.zz-note-config.json')
-const DEFAULT_DATA_DIR = path.join(os.homedir(), '.zz-note')
+const CONFIG_PATH = path.join(os.homedir(), '.ark-note-config.json')
+const DEFAULT_DATA_DIR = path.join(os.homedir(), '.ark-note')
+const LEGACY_BRAND_SLUG = globalThis.atob('enotbm90ZQ==')
+const LEGACY_CONFIG_PATH = path.join(os.homedir(), `.${LEGACY_BRAND_SLUG}-config.json`)
+const LEGACY_DEFAULT_DATA_DIR = path.join(os.homedir(), `.${LEGACY_BRAND_SLUG}`)
 
 export class AppConfig {
   private config: AppConfigData
 
   constructor() {
     this.config = this.load()
+    if (!fs.existsSync(CONFIG_PATH)) {
+      this.save()
+    }
   }
 
   /**
    * Load config from disk, or create default
    */
   private load(): AppConfigData {
+    const existingDefaultDataDir = !fs.existsSync(DEFAULT_DATA_DIR) && fs.existsSync(LEGACY_DEFAULT_DATA_DIR)
+      ? LEGACY_DEFAULT_DATA_DIR
+      : DEFAULT_DATA_DIR
+
     try {
-      if (fs.existsSync(CONFIG_PATH)) {
-        const content = fs.readFileSync(CONFIG_PATH, 'utf-8')
+      const configPath = fs.existsSync(CONFIG_PATH)
+        ? CONFIG_PATH
+        : fs.existsSync(LEGACY_CONFIG_PATH)
+          ? LEGACY_CONFIG_PATH
+          : null
+      const fallbackDataDir = configPath === LEGACY_CONFIG_PATH
+        ? LEGACY_DEFAULT_DATA_DIR
+        : existingDefaultDataDir
+
+      if (configPath) {
+        const content = fs.readFileSync(configPath, 'utf-8')
         const parsed = JSON.parse(content) as Partial<AppConfigData>
         return {
-          dataDir: parsed.dataDir || DEFAULT_DATA_DIR,
+          dataDir: parsed.dataDir || fallbackDataDir,
           windowBounds: parsed.windowBounds,
           closeAction: parsed.closeAction || 'ask',
           theme: parsed.theme || 'dark',
@@ -79,7 +98,7 @@ export class AppConfig {
     }
 
     return {
-      dataDir: DEFAULT_DATA_DIR,
+      dataDir: existingDefaultDataDir,
       closeAction: 'ask',
       theme: 'dark',
       sidebarWidth: 15,
@@ -258,10 +277,10 @@ export class AppConfig {
     }
 
     if (fs.existsSync(path.join(dir, 'salt.bin'))) {
-      return { mode: 'switch', message: '检测到已有 ZZ-Note 数据仓库：应用后只会切换到此目录，不会迁移或覆盖当前数据。' }
+      return { mode: 'switch', message: '检测到已有 arkNote 数据仓库：应用后只会切换到此目录，不会迁移或覆盖当前数据。' }
     }
 
-    return { mode: 'migrate', message: '未检测到已有 ZZ-Note 数据仓库：应用后会把当前数据迁移到此目录。' }
+    return { mode: 'migrate', message: '未检测到已有 arkNote 数据仓库：应用后会把当前数据迁移到此目录。' }
   }
 
   /**

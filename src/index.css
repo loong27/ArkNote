@@ -1,5 +1,5 @@
 /* ================================================================
-   ZZ-Note — Tianyi Blue Design System
+   arkNote - Tianyi Blue Design System
    ================================================================
    Core Philosophy: Clean, airy, distinctive. Sky blue brand accent
    with rich layered surfaces and colorful accents.
@@ -320,6 +320,8 @@ html, body, #root {
   object-fit: cover;
   border-radius: 8px;
   overflow: hidden;
+  image-rendering: auto;
+  user-select: none;
 }
 
 .default-avatar-fallback {
@@ -603,13 +605,39 @@ html, body, #root {
   line-height: 1.6;
 }
 
-.password-dialog > div:first-child {
-  margin-bottom: 14px !important;
+.auth-brand-lockup {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  margin: 0 auto 20px;
 }
 
-.password-dialog > div:first-child > div {
-  width: 64px !important;
-  height: 64px !important;
+.auth-brand-lockup .default-avatar {
+  display: block;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  filter: drop-shadow(0 12px 24px rgba(8, 59, 122, 0.24));
+}
+
+.auth-brand-lockup-loading {
+  margin-bottom: 16px;
+}
+
+.auth-brand-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: #ffffff;
+  background: #111827;
+  border: 3px solid var(--popover-bg);
+  border-radius: 50%;
+  box-shadow: 0 5px 12px rgba(8, 15, 30, 0.28);
 }
 
 .password-dialog .input-group {

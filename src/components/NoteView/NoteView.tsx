@@ -19,6 +19,7 @@ import { SearchInNote } from './SearchInNote'
 import { EditorToolbar } from './EditorToolbar'
 import type { SearchMatch } from '../../types'
 import { EditorView } from '@codemirror/view'
+import { migrateLegacyBrandReferences } from '../../../shared/brand'
 
 // Initialize markdown-it with HTML support + task lists
 const md = new MarkdownIt({
@@ -133,8 +134,8 @@ function setLeadingMarkdownTitle(markdown: string, noteTitle: string): string {
 function sanitizeRenderedHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     ADD_TAGS: ['details', 'summary'],
-    ADD_ATTR: ['target', 'rel', 'class', 'data-note-id', 'checked', 'width', 'height', 'data-zznote-image-id', 'data-zznote-width', 'data-zznote-height'],
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|data:image\/|zznote:\/\/|zznote-link:\/\/|#)/i,
+    ADD_ATTR: ['target', 'rel', 'class', 'data-note-id', 'checked', 'width', 'height', 'data-arknote-image-id', 'data-arknote-width', 'data-arknote-height'],
+    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|data:image\/|arknote:\/\/|arknote-link:\/\/|#)/i,
   })
 }
 
@@ -155,13 +156,13 @@ function applyImageDimensionAttributes(html: string): string {
   const template = document.createElement('template')
   template.innerHTML = html
 
-  for (const img of Array.from(template.content.querySelectorAll('img[data-zznote-image-id]'))) {
-    const width = getSafeDimension(img.getAttribute('data-zznote-width'))
-    const height = getSafeDimension(img.getAttribute('data-zznote-height'))
+  for (const img of Array.from(template.content.querySelectorAll('img[data-arknote-image-id]'))) {
+    const width = getSafeDimension(img.getAttribute('data-arknote-width'))
+    const height = getSafeDimension(img.getAttribute('data-arknote-height'))
     if (width) img.setAttribute('width', width)
     if (height) img.setAttribute('height', height)
-    img.removeAttribute('data-zznote-width')
-    img.removeAttribute('data-zznote-height')
+    img.removeAttribute('data-arknote-width')
+    img.removeAttribute('data-arknote-height')
   }
 
   return template.innerHTML
@@ -256,10 +257,10 @@ export const NoteView: React.FC = () => {
     let cancelled = false
     const timer = window.setTimeout(() => {
       const renderAsync = async () => {
-        let processedContent = content
+        let processedContent = migrateLegacyBrandReferences(content)
 
-        const mdImgRegex = /!\[([^\]]*)\]\(zznote:\/\/([^)]+)\)/g
-        const htmlImgRegex = /<img\b[^>]*\bsrc="zznote:\/\/([^"]+)"[^>]*>/g
+        const mdImgRegex = /!\[([^\]]*)\]\(arknote:\/\/([^)]+)\)/g
+        const htmlImgRegex = /<img\b[^>]*\bsrc="arknote:\/\/([^"]+)"[^>]*>/g
         const imageIds = new Set<string>()
 
         for (const match of processedContent.matchAll(mdImgRegex)) {
@@ -302,18 +303,18 @@ export const NoteView: React.FC = () => {
 
             const width = getSafeDimension(/\bwidth="([^"]+)"/i.exec(full)?.[1] ?? null)
             const height = getSafeDimension(/\bheight="([^"]+)"/i.exec(full)?.[1] ?? null)
-            let next = full.replace(`src="zznote://${id}"`, `src="${url}"`)
-            next = next.replace(/\sdata-zznote-image-id="[^"]*"/i, '')
-            next = next.replace(/\sdata-zznote-width="[^"]*"/i, '')
-            next = next.replace(/\sdata-zznote-height="[^"]*"/i, '')
-            next = next.replace(/<img\b/i, `<img data-zznote-image-id="${id}"${width ? ` data-zznote-width="${width}"` : ''}${height ? ` data-zznote-height="${height}"` : ''}`)
+            let next = full.replace(`src="arknote://${id}"`, `src="${url}"`)
+            next = next.replace(/\sdata-arknote-image-id="[^"]*"/i, '')
+            next = next.replace(/\sdata-arknote-width="[^"]*"/i, '')
+            next = next.replace(/\sdata-arknote-height="[^"]*"/i, '')
+            next = next.replace(/<img\b/i, `<img data-arknote-image-id="${id}"${width ? ` data-arknote-width="${width}"` : ''}${height ? ` data-arknote-height="${height}"` : ''}`)
             return next
           })
         }
 
         if (cancelled) return
 
-        const noteLinkRegex = /\[([^\]]*)\]\(zznote-link:\/\/([^)]+)\)/g
+        const noteLinkRegex = /\[([^\]]*)\]\(arknote-link:\/\/([^)]+)\)/g
         processedContent = processedContent.replace(noteLinkRegex, (_match, text, noteId) => {
           return `<a href="#" class="note-internal-link" data-note-id="${noteId}">${text}</a>`
         })
@@ -625,9 +626,10 @@ export const NoteView: React.FC = () => {
   // to ensure content is always up to date when the note object changes
   useEffect(() => {
     if (currentNote) {
+      const migratedContent = migrateLegacyBrandReferences(currentNote.content)
       const syncedContent = !isTrashNote
-        ? setLeadingMarkdownTitle(currentNote.content, currentNote.metadata.title)
-        : currentNote.content
+        ? setLeadingMarkdownTitle(migratedContent, currentNote.metadata.title)
+        : migratedContent
       setContent(syncedContent)
       latestContentRef.current = syncedContent
       setTitle(getLeadingMarkdownTitle(syncedContent) || currentNote.metadata.title)

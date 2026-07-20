@@ -126,13 +126,13 @@ export class SyncService {
     try {
       await this.git.raw(['config', '--get', 'user.name'])
     } catch {
-      await this.git.raw(['config', 'user.name', 'ZZ-Note Sync'])
+      await this.git.raw(['config', 'user.name', 'arkNote Sync'])
     }
 
     try {
       await this.git.raw(['config', '--get', 'user.email'])
     } catch {
-      await this.git.raw(['config', 'user.email', 'zz-note@local'])
+      await this.git.raw(['config', 'user.email', 'ark-note@local'])
     }
   }
 
@@ -207,7 +207,7 @@ export class SyncService {
       const interruptedStatus = await this.finishOrReportInterruptedOperation(action)
       if (interruptedStatus) return interruptedStatus
 
-      await this.commitLocalChanges(`ZZ-Note ${action} sync: ${new Date().toISOString()}`)
+      await this.commitLocalChanges(`arkNote ${action} sync: ${new Date().toISOString()}`)
 
       const remoteExists = await this.remoteBranchExists(branch)
       if (!remoteExists) {
@@ -303,7 +303,7 @@ export class SyncService {
     const conflictStatus = await this.getConflictStatusIfPresent()
     if (conflictStatus) return conflictStatus
 
-    await this.git.commit('ZZ-Note: complete interrupted merge')
+    await this.git.commit('arkNote: complete interrupted merge')
     if (this.isMergeInProgress()) {
       throw new Error('Git merge 未能正常结束')
     }
@@ -432,7 +432,7 @@ export class SyncService {
       const remainingStatus = await this.getConflictStatusIfPresent()
       if (remainingStatus) return remainingStatus
 
-      await this.git.commit('ZZ-Note: merge remote changes')
+      await this.git.commit('arkNote: merge remote changes')
       if (this.isMergeInProgress()) {
         throw new Error('冲突文件已暂存，但 Git merge 仍未结束')
       }

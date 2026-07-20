@@ -92,8 +92,8 @@ export const TitleBar: React.FC = () => {
         {/* Left: App title (also draggable area) */}
         <div className="title-bar-drag">
           <div className="title-bar-title">
-            <DefaultAvatar alt="ZZ-Note" size={18} />
-            <span>ZZ-Note</span>
+            <DefaultAvatar alt="arkNote" size={18} />
+            <span>arkNote</span>
           </div>
         </div>
 
