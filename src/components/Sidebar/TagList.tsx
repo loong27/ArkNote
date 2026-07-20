@@ -3,8 +3,10 @@ import { Tag as TagIcon, FileText } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { SearchBar } from './SearchBar'
 import type { NoteMetadata } from '../../types'
+import { useI18n } from '../../i18n/I18nProvider'
 
 export const TagList: React.FC = () => {
+  const { t } = useI18n()
   const { tags, tagNoteCounts, openNote, selectedTagId, setSelectedTagId, runAfterPendingSave } = useStore()
   const [searchQuery, setSearchQuery] = useState('')
   const [tagNotes, setTagNotes] = useState<NoteMetadata[]>([])
@@ -56,7 +58,7 @@ export const TagList: React.FC = () => {
       <SearchBar
         value={searchQuery}
         onChange={setSearchQuery}
-        placeholder="搜索标签..."
+        placeholder={t('搜索标签...')}
       />
 
       <div className="sidebar-content">
@@ -72,13 +74,13 @@ export const TagList: React.FC = () => {
                 ←
               </span>
               <span className="tree-label" style={{ color: 'var(--accent)' }}>
-                返回标签列表
+                {t('返回标签列表')}
               </span>
             </div>
 
             {tagNotes.length === 0 ? (
               <div className="empty-state">
-                <p>该标签下暂无笔记</p>
+                <p>{t('该标签下暂无笔记')}</p>
               </div>
             ) : (
               tagNotes.map(note => (
@@ -119,7 +121,7 @@ export const TagList: React.FC = () => {
             {filteredTags.length === 0 && (
               <div className="empty-state">
                 <TagIcon size={32} strokeWidth={1.5} />
-                <p>{searchQuery ? '未找到匹配的标签' : '暂无标签'}</p>
+                <p>{searchQuery ? t('未找到匹配的标签') : t('暂无标签')}</p>
               </div>
             )}
           </div>

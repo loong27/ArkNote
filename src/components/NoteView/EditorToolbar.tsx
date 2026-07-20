@@ -37,6 +37,7 @@ import {
 } from 'lucide-react'
 import { EditorView } from '@codemirror/view'
 import { useStore } from '../../store/useStore'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface Props {
   editorViewRef: React.RefObject<EditorView | null>
@@ -153,6 +154,7 @@ function CommandButton({ title, onClick, children }: CommandButtonProps) {
 }
 
 export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, rightActions }) => {
+  const { t } = useI18n()
   const [activeDropdown, setActiveDropdown] = useState<DropdownName>(null)
   const [tableHover, setTableHover] = useState({ rows: 0, cols: 0 })
   const [noteLinkSearch, setNoteLinkSearch] = useState('')
@@ -244,30 +246,30 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
 
   const handleHeading = (level: number) => {
     transformSelectedLines((lines) => lines.map((line) => {
-      const text = line.replace(/^\s{0,3}#{1,6}\s+/, '') || '标题'
+      const text = line.replace(/^\s{0,3}#{1,6}\s+/, '') || t('标题')
       return level === 0 ? text : `${'#'.repeat(level)} ${text}`
     }))
     setActiveDropdown(null)
   }
 
-  const handleBold = () => wrapSelection('**', '**', '粗体文本')
-  const handleItalic = () => wrapSelection('*', '*', '斜体文本')
-  const handleUnderline = () => wrapSelection('++', '++', '插入文本')
-  const handleStrikethrough = () => wrapSelection('~~', '~~', '删除线文本')
-  const handleHighlight = () => wrapSelection('==', '==', '高亮文本')
+  const handleBold = () => wrapSelection('**', '**', t('粗体文本'))
+  const handleItalic = () => wrapSelection('*', '*', t('斜体文本'))
+  const handleUnderline = () => wrapSelection('++', '++', t('插入文本'))
+  const handleStrikethrough = () => wrapSelection('~~', '~~', t('删除线文本'))
+  const handleHighlight = () => wrapSelection('==', '==', t('高亮文本'))
   const handleInlineCode = () => wrapSelection('`', '`', 'code')
-  const handleSubscript = () => wrapSelection('~', '~', '下标')
-  const handleSuperscript = () => wrapSelection('^', '^', '上标')
+  const handleSubscript = () => wrapSelection('~', '~', t('下标'))
+  const handleSuperscript = () => wrapSelection('^', '^', t('上标'))
   const handleHorizontalRule = () => replaceSelection('\n\n---\n\n')
-  const handleBlockquote = () => toggleLinePrefix(/^\s{0,3}>\s?/, () => '> ', '引用内容')
-  const handleUnorderedList = () => toggleLinePrefix(/^\s*[-+*]\s+(?!\[[ xX]\])/, () => '- ', '列表项')
-  const handleOrderedList = () => toggleLinePrefix(/^\s*\d+[.)]\s+/, (index) => `${index + 1}. `, '列表项')
-  const handleTaskList = () => toggleLinePrefix(/^\s*[-+*]\s+\[[ xX]\]\s+/, () => '- [ ] ', '任务项')
+  const handleBlockquote = () => toggleLinePrefix(/^\s{0,3}>\s?/, () => '> ', t('引用内容'))
+  const handleUnorderedList = () => toggleLinePrefix(/^\s*[-+*]\s+(?!\[[ xX]\])/, () => '- ', t('列表项'))
+  const handleOrderedList = () => toggleLinePrefix(/^\s*\d+[.)]\s+/, (index) => `${index + 1}. `, t('列表项'))
+  const handleTaskList = () => toggleLinePrefix(/^\s*[-+*]\s+\[[ xX]\]\s+/, () => '- [ ] ', t('任务项'))
 
   const handleCodeBlock = () => {
     const selection = getSelection()
     if (!selection) return
-    const text = selection.text || '代码'
+    const text = selection.text || t('代码')
     const block = `\n\n\`\`\`\n${text}\n\`\`\`\n\n`
     const start = block.indexOf(text)
     replaceSelection(block, start, start + text.length)
@@ -276,7 +278,7 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
   const handleLink = () => {
     const selection = getSelection()
     if (!selection) return
-    const label = selection.text || '链接文本'
+    const label = selection.text || t('链接文本')
     const text = `[${label}](https://)`
     const urlStart = label.length + 3
     replaceSelection(text, urlStart, urlStart + 8)
@@ -285,20 +287,22 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
   const handleImageInsert = async () => {
     const imageId = await onImageUpload()
     if (!imageId) return
-    const text = `\n\n<img src="arknote://${imageId}" alt="图片" width="600" />\n\n`
-    replaceSelection(text, text.indexOf('图片'), text.indexOf('图片') + 2)
+    const imageLabel = t('图片')
+    const text = `\n\n<img src="arknote://${imageId}" alt="${imageLabel}" width="600" />\n\n`
+    replaceSelection(text, text.indexOf(imageLabel), text.indexOf(imageLabel) + imageLabel.length)
   }
 
   const handleTable = (rows: number, cols: number) => {
-    const header = `| ${Array.from({ length: cols }, (_, index) => `列${index + 1}`).join(' | ')} |`
+    const header = `| ${Array.from({ length: cols }, (_, index) => t('列 {number}', { number: index + 1 })).join(' | ')} |`
     const separator = `| ${Array.from({ length: cols }, () => '---').join(' | ')} |`
     const body = Array.from(
       { length: rows },
-      () => `| ${Array.from({ length: cols }, () => '内容').join(' | ')} |`
+      () => `| ${Array.from({ length: cols }, () => t('内容')).join(' | ')} |`
     )
     const table = `\n\n${[header, separator, ...body].join('\n')}\n\n`
-    const firstCell = table.indexOf('列1')
-    replaceSelection(table, firstCell, firstCell + 2)
+    const firstCellLabel = t('列 {number}', { number: 1 })
+    const firstCell = table.indexOf(firstCellLabel)
+    replaceSelection(table, firstCell, firstCell + firstCellLabel.length)
     setActiveDropdown(null)
     setTableHover({ rows: 0, cols: 0 })
   }
@@ -310,34 +314,35 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
       .map((match) => Number(match[1]))
       .filter(Number.isFinite)
     const number = (numbers.length > 0 ? Math.max(...numbers) : 0) + 1
-    const label = selection.text || '正文'
+    const label = selection.text || t('正文')
     const marker = `[^${number}]`
-    const definition = '脚注内容'
+    const definition = t('脚注内容')
     const text = `${label}${marker}\n\n${marker}: ${definition}`
     const definitionStart = text.lastIndexOf(definition)
     replaceSelection(text, definitionStart, definitionStart + definition.length)
   }
 
   const handleDefinitionList = () => {
-    const text = '术语\n: 定义内容'
-    replaceSelection(`\n\n${text}\n\n`, 2, 4)
+    const term = t('术语')
+    const text = `${term}\n: ${t('定义内容')}`
+    replaceSelection(`\n\n${text}\n\n`, 2, 2 + term.length)
   }
 
   const handleFontColor = (color: string) => {
-    wrapSelection(`<span style="color: ${color}">`, '</span>', '彩色文本')
+    wrapSelection(`<span style="color: ${color}">`, '</span>', t('彩色文本'))
     setActiveDropdown(null)
   }
 
   const handleSequenceDiagram = () => {
-    replaceSelection('\n\n```mermaid\nsequenceDiagram\n    participant A as 参与者A\n    participant B as 参与者B\n    A->>B: 请求\n    B-->>A: 响应\n```\n\n')
+    replaceSelection(`\n\n\`\`\`mermaid\nsequenceDiagram\n    participant A as ${t('参与者 A')}\n    participant B as ${t('参与者 B')}\n    A->>B: ${t('请求')}\n    B-->>A: ${t('响应')}\n\`\`\`\n\n`)
   }
 
   const handleFlowchart = () => {
-    replaceSelection('\n\n```mermaid\nflowchart TD\n    A[开始] --> B{判断}\n    B -->|是| C[处理]\n    B -->|否| D[结束]\n    C --> D\n```\n\n')
+    replaceSelection(`\n\n\`\`\`mermaid\nflowchart TD\n    A[${t('开始')}] --> B{${t('判断')}}\n    B -->|${t('是')}| C[${t('处理')}]\n    B -->|${t('否')}| D[${t('结束')}]\n    C --> D\n\`\`\`\n\n`)
   }
 
   const handlePieChart = () => {
-    replaceSelection('\n\n```mermaid\npie title 饼图示例\n    "类别A" : 40\n    "类别B" : 30\n    "类别C" : 20\n    "类别D" : 10\n```\n\n')
+    replaceSelection(`\n\n\`\`\`mermaid\npie title ${t('饼图示例')}\n    "${t('类别 {letter}', { letter: 'A' })}" : 40\n    "${t('类别 {letter}', { letter: 'B' })}" : 30\n    "${t('类别 {letter}', { letter: 'C' })}" : 20\n    "${t('类别 {letter}', { letter: 'D' })}" : 10\n\`\`\`\n\n`)
   }
 
   const handleEmoji = (emoji: string) => {
@@ -375,13 +380,13 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
     <div className="editor-toolbar">
       <div className="editor-toolbar-main">
         <div className="toolbar-group">
-          <button ref={headingButtonRef} {...dropdownButtonProps('heading')} title="标题与正文">
+          <button ref={headingButtonRef} {...dropdownButtonProps('heading')} title={t('标题与正文')}>
             <Heading1 size={16} strokeWidth={1.5} />
           </button>
-          <CommandButton title="引用" onClick={handleBlockquote}>
+          <CommandButton title={t('引用')} onClick={handleBlockquote}>
             <Quote size={16} strokeWidth={1.5} />
           </CommandButton>
-          <CommandButton title="代码块" onClick={handleCodeBlock}>
+          <CommandButton title={t('代码块')} onClick={handleCodeBlock}>
             <CodeXml size={16} strokeWidth={1.5} />
           </CommandButton>
         </div>
@@ -389,52 +394,52 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <CommandButton title="加粗 (Ctrl+B)" onClick={handleBold}><Bold size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="斜体 (Ctrl+I)" onClick={handleItalic}><Italic size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="插入文本 / 下划线" onClick={handleUnderline}><Underline size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="删除线" onClick={handleStrikethrough}><Strikethrough size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="文本高亮" onClick={handleHighlight}><Highlighter size={16} strokeWidth={1.5} /></CommandButton>
-          <button ref={colorButtonRef} {...dropdownButtonProps('color')} title="字体颜色">
+          <CommandButton title={t('加粗 (Ctrl+B)')} onClick={handleBold}><Bold size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('斜体 (Ctrl+I)')} onClick={handleItalic}><Italic size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('插入文本 / 下划线')} onClick={handleUnderline}><Underline size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('删除线')} onClick={handleStrikethrough}><Strikethrough size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('文本高亮')} onClick={handleHighlight}><Highlighter size={16} strokeWidth={1.5} /></CommandButton>
+          <button ref={colorButtonRef} {...dropdownButtonProps('color')} title={t('字体颜色')}>
             <Palette size={16} strokeWidth={1.5} />
           </button>
-          <CommandButton title="内嵌代码" onClick={handleInlineCode}><Code size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="下标" onClick={handleSubscript}><Subscript size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="上标" onClick={handleSuperscript}><Superscript size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('内嵌代码')} onClick={handleInlineCode}><Code size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('下标')} onClick={handleSubscript}><Subscript size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('上标')} onClick={handleSuperscript}><Superscript size={16} strokeWidth={1.5} /></CommandButton>
         </div>
 
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <CommandButton title="无序列表" onClick={handleUnorderedList}><List size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="有序列表" onClick={handleOrderedList}><ListOrdered size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="任务列表" onClick={handleTaskList}><ListChecks size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="定义列表" onClick={handleDefinitionList}><ListTree size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('无序列表')} onClick={handleUnorderedList}><List size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('有序列表')} onClick={handleOrderedList}><ListOrdered size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('任务列表')} onClick={handleTaskList}><ListChecks size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('定义列表')} onClick={handleDefinitionList}><ListTree size={16} strokeWidth={1.5} /></CommandButton>
         </div>
 
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <CommandButton title="水平线" onClick={handleHorizontalRule}><Minus size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="插入链接" onClick={handleLink}><Link2 size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="插入图片" onClick={() => { void handleImageInsert() }}><ImagePlus size={16} strokeWidth={1.5} /></CommandButton>
-          <button ref={tableButtonRef} {...dropdownButtonProps('table')} title="插入表格">
+          <CommandButton title={t('水平线')} onClick={handleHorizontalRule}><Minus size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('插入链接')} onClick={handleLink}><Link2 size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('插入图片')} onClick={() => { void handleImageInsert() }}><ImagePlus size={16} strokeWidth={1.5} /></CommandButton>
+          <button ref={tableButtonRef} {...dropdownButtonProps('table')} title={t('插入表格')}>
             <Table size={16} strokeWidth={1.5} />
           </button>
-          <CommandButton title="插入脚注" onClick={handleFootnote}><Pilcrow size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('插入脚注')} onClick={handleFootnote}><Pilcrow size={16} strokeWidth={1.5} /></CommandButton>
         </div>
 
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <CommandButton title="时序图" onClick={handleSequenceDiagram}><GitBranch size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="流程图" onClick={handleFlowchart}><Workflow size={16} strokeWidth={1.5} /></CommandButton>
-          <CommandButton title="饼图" onClick={handlePieChart}><PieChart size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('时序图')} onClick={handleSequenceDiagram}><GitBranch size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('流程图')} onClick={handleFlowchart}><Workflow size={16} strokeWidth={1.5} /></CommandButton>
+          <CommandButton title={t('饼图')} onClick={handlePieChart}><PieChart size={16} strokeWidth={1.5} /></CommandButton>
         </div>
 
         <div className="toolbar-divider" />
 
         <div className="toolbar-group">
-          <button ref={emojiButtonRef} {...dropdownButtonProps('emoji')} title="插入表情">
+          <button ref={emojiButtonRef} {...dropdownButtonProps('emoji')} title={t('插入表情')}>
             <Smile size={16} strokeWidth={1.5} />
           </button>
           <button
@@ -445,7 +450,7 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
               setNoteLinkSearch('')
               toggleDropdown('note-link')
             }}
-            title="插入笔记链接"
+            title={t('插入笔记链接')}
           >
             <FileText size={16} strokeWidth={1.5} />
           </button>
@@ -459,12 +464,12 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
           {[1, 2, 3, 4, 5, 6].map((level) => (
             <button key={level} type="button" className="heading-picker-item" onClick={() => handleHeading(level)}>
               <span className="heading-picker-mark">H{level}</span>
-              <span>{level === 1 ? '一级标题' : `${level} 级标题`}</span>
+              <span>{level === 1 ? t('一级标题') : t('{level} 级标题', { level })}</span>
             </button>
           ))}
           <button type="button" className="heading-picker-item" onClick={() => handleHeading(0)}>
             <Braces size={15} strokeWidth={1.5} />
-            <span>正文</span>
+            <span>{t('正文')}</span>
           </button>
         </ToolbarPopover>
       )}
@@ -489,7 +494,7 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
       {activeDropdown === 'table' && (
         <ToolbarPopover anchorRef={tableButtonRef} className="table-picker-dropdown">
           <div className="table-picker-label">
-            {tableHover.rows > 0 ? `${tableHover.rows} 行 × ${tableHover.cols} 列` : '选择表格大小'}
+            {tableHover.rows > 0 ? t('{rows} 行 × {cols} 列', { rows: tableHover.rows, cols: tableHover.cols }) : t('选择表格大小')}
           </div>
           <div className="table-grid" onMouseLeave={() => setTableHover({ rows: 0, cols: 0 })}>
             {Array.from({ length: TABLE_MAX_ROWS }, (_, row) => (
@@ -501,7 +506,7 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
                     className={`table-grid-cell ${row < tableHover.rows && col < tableHover.cols ? 'active' : ''}`}
                     onMouseEnter={() => setTableHover({ rows: row + 1, cols: col + 1 })}
                     onClick={() => handleTable(row + 1, col + 1)}
-                    aria-label={`插入 ${row + 1} 行 ${col + 1} 列表格`}
+                    aria-label={t('插入 {rows} 行 {cols} 列表格', { rows: row + 1, cols: col + 1 })}
                   />
                 ))}
               </div>
@@ -527,14 +532,14 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
           <input
             className="note-link-search"
             type="text"
-            placeholder="搜索笔记..."
+            placeholder={t('搜索笔记...')}
             value={noteLinkSearch}
             onChange={(event) => setNoteLinkSearch(event.target.value)}
             autoFocus
           />
           <div className="note-link-list">
             {filteredNotes.length === 0 ? (
-              <div className="note-link-empty">未找到笔记</div>
+              <div className="note-link-empty">{t('未找到笔记')}</div>
             ) : (
               filteredNotes.slice(0, 20).map((note) => (
                 <button

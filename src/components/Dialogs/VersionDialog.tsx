@@ -1,8 +1,10 @@
 import React, { useState } from 'react'
 import { X, History, Clock, Save } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import { useI18n } from '../../i18n/I18nProvider'
 
 export const VersionDialog: React.FC = () => {
+  const { t } = useI18n()
   const {
     versionDialogOpen,
     versionNoteId,
@@ -76,7 +78,7 @@ export const VersionDialog: React.FC = () => {
         <div className="dialog-header">
           <h3>
             <History size={18} strokeWidth={1.5} style={{ marginRight: 8, verticalAlign: 'middle' }} />
-            历史版本
+            {t('历史版本')}
           </h3>
           <button className="icon-btn" onClick={() => {
             setPreviewContent(null)
@@ -97,9 +99,9 @@ export const VersionDialog: React.FC = () => {
             {versions.length === 0 ? (
               <div className="empty-state">
                 <Clock size={32} strokeWidth={1.5} />
-                <p>暂无历史版本</p>
+                <p>{t('暂无历史版本')}</p>
                 <p style={{ fontSize: '12px' }}>
-                  使用 Ctrl+S 手动保存版本，或等待自动保存
+                  {t('使用 Ctrl+S 手动保存版本，或等待自动保存')}
                 </p>
               </div>
             ) : (
@@ -119,7 +121,7 @@ export const VersionDialog: React.FC = () => {
                       </div>
                     </div>
                     <span className={`version-badge ${version.isManual ? 'manual' : ''}`}>
-                      {version.isManual ? '手动保存' : '自动保存'}
+                      {version.isManual ? t('手动保存') : t('自动保存')}
                     </span>
                   </div>
                 ))}
@@ -136,7 +138,7 @@ export const VersionDialog: React.FC = () => {
                 marginBottom: 8,
                 fontWeight: 600,
               }}>
-                版本预览
+                {t('版本预览')}
               </div>
               <pre style={{
                 background: 'var(--bg-primary)',
@@ -151,7 +153,7 @@ export const VersionDialog: React.FC = () => {
                 maxHeight: '400px',
                 overflow: 'auto',
               }}>
-                {loading ? '加载中...' : previewContent}
+                {loading ? t('加载中...') : previewContent}
               </pre>
             </div>
           )}
@@ -162,7 +164,7 @@ export const VersionDialog: React.FC = () => {
             setPreviewContent(null)
             closeVersionDialog()
           }}>
-            关闭
+            {t('关闭')}
           </button>
           {previewContent !== null && !isTrashNote && (
             <button
@@ -171,7 +173,7 @@ export const VersionDialog: React.FC = () => {
               disabled={restoring}
             >
               <Save size={14} strokeWidth={1.5} />
-              {restoring ? '恢复中...' : '恢复此版本'}
+              {restoring ? t('恢复中...') : t('恢复此版本')}
             </button>
           )}
         </div>

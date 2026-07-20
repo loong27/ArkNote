@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { User } from 'lucide-react'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface DefaultAvatarProps {
   alt?: string
@@ -11,11 +12,13 @@ interface DefaultAvatarProps {
 const DEFAULT_AVATAR_SRC = new URL('./default-avatar.png', document.baseURI).href
 
 export const DefaultAvatar: React.FC<DefaultAvatarProps> = ({
-  alt = '默认头像',
+  alt,
   className,
   size,
   style,
 }) => {
+  const { t } = useI18n()
+  const resolvedAlt = alt ?? t('默认头像')
   const [loadFailed, setLoadFailed] = useState(false)
   const classNames = ['default-avatar', className].filter(Boolean).join(' ')
   const sizeStyle = size ? { width: size, height: size } : undefined
@@ -27,7 +30,7 @@ export const DefaultAvatar: React.FC<DefaultAvatarProps> = ({
       <span
         className={`${classNames} default-avatar-fallback`}
         role="img"
-        aria-label={alt}
+        aria-label={resolvedAlt}
         style={mergedStyle}
       >
         <User size={iconSize} strokeWidth={1.8} />
@@ -39,7 +42,7 @@ export const DefaultAvatar: React.FC<DefaultAvatarProps> = ({
     <img
       className={classNames}
       src={DEFAULT_AVATAR_SRC}
-      alt={alt}
+      alt={resolvedAlt}
       style={mergedStyle}
       draggable={false}
       onError={() => setLoadFailed(true)}

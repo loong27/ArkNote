@@ -1,8 +1,10 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react'
 import { X, Trash2, Search } from 'lucide-react'
 import { useStore } from '../../store/useStore'
+import { useI18n } from '../../i18n/I18nProvider'
 
 export const TagDialog: React.FC = () => {
+  const { t } = useI18n()
   const {
     tagDialogOpen,
     tagNoteId,
@@ -69,7 +71,7 @@ export const TagDialog: React.FC = () => {
         setSelectedTagIds(newSet)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : '创建标签失败')
+      setError(err instanceof Error ? err.message : t('创建标签失败'))
     }
   }
 
@@ -79,7 +81,7 @@ export const TagDialog: React.FC = () => {
     try {
       const result = await window.electronAPI.tags.delete(tagId)
       if (!result.success) {
-        setError(result.message)
+        setError(t(result.message))
         return
       }
       setError('')
@@ -89,7 +91,7 @@ export const TagDialog: React.FC = () => {
       setSelectedTagIds(newSet)
       await loadData()
     } catch (err) {
-      setError(err instanceof Error ? err.message : '删除标签失败')
+      setError(err instanceof Error ? err.message : t('删除标签失败'))
     }
   }
 
@@ -118,7 +120,7 @@ export const TagDialog: React.FC = () => {
     <div className="dialog-overlay" onClick={closeTagDialog}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
-          <h3>添加标签</h3>
+          <h3>{t('添加标签')}</h3>
           <button className="icon-btn" onClick={closeTagDialog}>
             <X size={18} strokeWidth={1.5} />
           </button>
@@ -131,7 +133,7 @@ export const TagDialog: React.FC = () => {
               type="text"
               value={newTagName}
               onChange={(e) => setNewTagName(e.target.value)}
-              placeholder="新标签名称 (回车添加)"
+              placeholder={t('新标签名称 (回车添加)')}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleCreateTag()
               }}
@@ -140,7 +142,7 @@ export const TagDialog: React.FC = () => {
               type="color"
               value={newTagColor}
               onChange={(e) => setNewTagColor(e.target.value)}
-              title="标签颜色"
+              title={t('标签颜色')}
             />
           </div>
 
@@ -166,7 +168,7 @@ export const TagDialog: React.FC = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="搜索标签..."
+                  placeholder={t('搜索标签...')}
                 />
               </div>
             </div>
@@ -186,13 +188,13 @@ export const TagDialog: React.FC = () => {
                   <span className="tag-name">{tag.name}</span>
                   {otherNoteCount > 0 && (
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      ({otherNoteCount} 篇笔记)
+                      {t('({count} 篇笔记)', { count: otherNoteCount })}
                     </span>
                   )}
                   <button
                     className="tag-delete-btn icon-btn sm"
                     onClick={(e) => handleDeleteTag(tag.id, e)}
-                    title={otherNoteCount > 0 ? '该标签关联了其他笔记，无法删除' : '删除标签'}
+                    title={otherNoteCount > 0 ? t('该标签关联了其他笔记，无法删除') : t('删除标签')}
                   >
                     <Trash2 size={14} strokeWidth={1.5} />
                   </button>
@@ -202,7 +204,7 @@ export const TagDialog: React.FC = () => {
 
             {filteredTags.length === 0 && (
               <div className="empty-state">
-                <p>{searchQuery ? '未找到匹配的标签' : '暂无标签，请创建一个'}</p>
+                <p>{searchQuery ? t('未找到匹配的标签') : t('暂无标签，请创建一个')}</p>
               </div>
             )}
           </div>
@@ -210,15 +212,15 @@ export const TagDialog: React.FC = () => {
 
         <div className="dialog-footer">
           <div style={{ flex: 1, fontSize: '13px', color: 'var(--text-muted)' }}>
-            已选择 {selectedTagIds.size} 个标签
+            {t('已选择 {count} 个标签', { count: selectedTagIds.size })}
           </div>
-          <button className="btn" onClick={closeTagDialog}>取消</button>
+          <button className="btn" onClick={closeTagDialog}>{t('取消')}</button>
           <button
             className="btn btn-primary"
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? '保存中...' : '保存'}
+            {saving ? t('保存中...') : t('保存')}
           </button>
         </div>
       </div>

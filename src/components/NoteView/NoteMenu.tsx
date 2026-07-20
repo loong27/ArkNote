@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { ConfirmDialog } from '../Dialogs/ConfirmDialog'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface Props {
   noteId: string
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) => {
+  const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -101,7 +103,7 @@ export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) =>
   return (
     <>
       <div className="note-menu-container" ref={menuRef}>
-        <button className="icon-btn" onClick={() => setOpen(!open)} data-tooltip="更多操作">
+        <button className="icon-btn" onClick={() => setOpen(!open)} data-tooltip={t('更多操作')}>
           <MoreHorizontal size={18} strokeWidth={1.5} />
         </button>
 
@@ -111,34 +113,34 @@ export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) =>
             {trashMode ? (
               <button className="note-menu-item" onClick={handleVersions}>
                 <History size={16} strokeWidth={1.5} />
-                <span>历史版本</span>
+                <span>{t('历史版本')}</span>
               </button>
             ) : (
               <>
                 <button className="note-menu-item" onClick={handleDownload}>
                   <Download size={16} strokeWidth={1.5} />
-                  <span>下载 MD</span>
+                  <span>{t('下载 MD')}</span>
                 </button>
                 <button className="note-menu-item" onClick={handleMove}>
                   <FolderInput size={16} strokeWidth={1.5} />
-                  <span>移动到...</span>
+                  <span>{t('移动到...')}</span>
                 </button>
                 <button className="note-menu-item" onClick={handleVersions}>
                   <History size={16} strokeWidth={1.5} />
-                  <span>历史版本</span>
+                  <span>{t('历史版本')}</span>
                 </button>
                 <button className="note-menu-item" onClick={handleExportPdf}>
                   <FileOutput size={16} strokeWidth={1.5} />
-                  <span>导出为 PDF</span>
+                  <span>{t('导出为 PDF')}</span>
                 </button>
                 <button className="note-menu-item" onClick={handleTags}>
                   <Tag size={16} strokeWidth={1.5} />
-                  <span>添加标签</span>
+                  <span>{t('添加标签')}</span>
                 </button>
                 <div className="note-menu-separator" />
                 <button className="note-menu-item danger" onClick={handleDelete}>
                   <Trash2 size={16} strokeWidth={1.5} />
-                  <span>移入回收站</span>
+                  <span>{t('移入回收站')}</span>
                 </button>
               </>
             )}
@@ -149,10 +151,10 @@ export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) =>
       {!trashMode && (
         <ConfirmDialog
           open={showDeleteConfirm}
-          title="移入回收站"
-          message={`确定要将笔记「${currentNote?.metadata?.title || ''}」移入回收站吗？`}
-          confirmText="确认"
-          cancelText="取消"
+          title={t('移入回收站')}
+          message={t('确定要将笔记「{name}」移入回收站吗？', { name: currentNote?.metadata?.title || '' })}
+          confirmText={t('确认')}
+          cancelText={t('取消')}
           danger
           onConfirm={handleConfirmDelete}
           onCancel={() => setShowDeleteConfirm(false)}

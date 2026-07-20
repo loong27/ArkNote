@@ -8,6 +8,7 @@ const api: ElectronAPI = {
     isLocked: () => ipcRenderer.invoke('auth:isLocked'),
     isFirstTime: () => ipcRenderer.invoke('auth:isFirstTime'),
     getUnlockStatus: () => ipcRenderer.invoke('auth:getUnlockStatus'),
+    restoreFromGit: (request) => ipcRenderer.invoke('auth:restoreFromGit', request),
     changePassword: (oldPassword: string, newPassword: string) =>
       ipcRenderer.invoke('auth:changePassword', oldPassword, newPassword),
     onLocked: (callback) => {
@@ -115,10 +116,23 @@ const api: ElectronAPI = {
     restartApp: () => ipcRenderer.invoke('config:restartApp'),
     getTheme: () => ipcRenderer.invoke('config:getTheme'),
     setTheme: (theme: 'dark' | 'light') => ipcRenderer.invoke('config:setTheme', theme),
+    getLanguage: () => ipcRenderer.invoke('config:getLanguage'),
+    setLanguage: (language) => ipcRenderer.invoke('config:setLanguage', language),
     getSidebarWidth: () => ipcRenderer.invoke('config:getSidebarWidth'),
     setSidebarWidth: (width: number) => ipcRenderer.invoke('config:setSidebarWidth', width),
     getSecurity: () => ipcRenderer.invoke('config:getSecurity'),
     setSecurity: (config) => ipcRenderer.invoke('config:setSecurity', config),
+  },
+  updates: {
+    getState: () => ipcRenderer.invoke('updates:getState'),
+    check: () => ipcRenderer.invoke('updates:check'),
+    download: () => ipcRenderer.invoke('updates:download'),
+    install: () => ipcRenderer.invoke('updates:install'),
+    onStateChanged: (callback) => {
+      const listener = (_event: Electron.IpcRendererEvent, state: Parameters<typeof callback>[0]) => callback(state)
+      ipcRenderer.on('updates:state-changed', listener)
+      return () => ipcRenderer.removeListener('updates:state-changed', listener)
+    },
   },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),

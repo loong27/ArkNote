@@ -2,8 +2,10 @@ import React, { useState, useMemo, useCallback } from 'react'
 import { X, Folder, FolderOpen, ChevronRight, Search } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import type { Directory } from '../../types'
+import { useI18n } from '../../i18n/I18nProvider'
 
 export const MoveDialog: React.FC = () => {
+  const { t } = useI18n()
   const {
     moveDialogOpen,
     moveNoteId,
@@ -103,7 +105,7 @@ export const MoveDialog: React.FC = () => {
     <div className="dialog-overlay" onClick={closeMoveDialog}>
       <div className="dialog" onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
-          <h3>移动到...</h3>
+          <h3>{t('移动到...')}</h3>
           <button className="icon-btn" onClick={closeMoveDialog}>
             <X size={18} strokeWidth={1.5} />
           </button>
@@ -117,7 +119,7 @@ export const MoveDialog: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索目录..."
+                placeholder={t('搜索目录...')}
               />
             </div>
           </div>
@@ -133,7 +135,7 @@ export const MoveDialog: React.FC = () => {
               background: 'var(--bg-primary)',
               borderRadius: 'var(--radius-sm)',
             }}>
-              选中: {getDirectoryPathString(selectedDirId)}
+              {t('选中: {path}', { path: getDirectoryPathString(selectedDirId) })}
             </div>
           )}
 
@@ -141,19 +143,19 @@ export const MoveDialog: React.FC = () => {
 
           {rootDirs.length === 0 && (
             <div className="empty-state">
-              <p>{searchQuery ? '未找到匹配的目录' : '暂无目录'}</p>
+              <p>{searchQuery ? t('未找到匹配的目录') : t('暂无目录')}</p>
             </div>
           )}
         </div>
 
         <div className="dialog-footer">
-          <button className="btn" onClick={closeMoveDialog}>取消</button>
+          <button className="btn" onClick={closeMoveDialog}>{t('取消')}</button>
           <button
             className="btn btn-primary"
             onClick={handleMove}
             disabled={!selectedDirId || moving}
           >
-            {moving ? '移动中...' : '确认移动'}
+            {moving ? t('移动中...') : t('确认移动')}
           </button>
         </div>
       </div>

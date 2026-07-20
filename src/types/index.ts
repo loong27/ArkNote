@@ -1,5 +1,8 @@
 // ========== Core Data Types ==========
 
+import type { AppLanguage } from '../../shared/i18n'
+export type { AppLanguage } from '../../shared/i18n'
+
 export interface Directory {
   id: string
   name: string
@@ -114,9 +117,38 @@ export interface AuthThrottleStatus {
   failedAttempts: number
 }
 
+export interface VaultRestoreRequest {
+  repoUrl: string
+  branch: string
+}
+
+export interface VaultRestoreResult {
+  success: boolean
+  message: string
+}
+
 export interface SecurityConfig {
   autoLockMinutes: number
   lockOnMinimize: boolean
+}
+
+export type AppUpdatePhase =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
+  | 'disabled'
+
+export interface AppUpdateState {
+  phase: AppUpdatePhase
+  currentVersion: string
+  availableVersion: string | null
+  progress: number | null
+  message: string
+  checkedAt: string | null
 }
 
 // ========== Metadata Store (persisted encrypted) ==========
@@ -173,6 +205,7 @@ export interface ElectronAPI {
     isLocked: () => Promise<boolean>
     isFirstTime: () => Promise<boolean>
     getUnlockStatus: () => Promise<AuthThrottleStatus>
+    restoreFromGit: (request: VaultRestoreRequest) => Promise<VaultRestoreResult>
     changePassword: (oldPassword: string, newPassword: string) => Promise<AuthResult>
     onLocked: (callback: () => void) => void
     removeAllListeners: () => void
@@ -261,6 +294,7 @@ export interface ElectronAPI {
       defaultDataDir: string
       configPath: string
       theme: 'dark' | 'light'
+      language: AppLanguage
       sidebarWidth: number
       autoLockMinutes: number
       lockOnMinimize: boolean
@@ -268,10 +302,19 @@ export interface ElectronAPI {
     restartApp: () => Promise<void>
     getTheme: () => Promise<'dark' | 'light'>
     setTheme: (theme: 'dark' | 'light') => Promise<void>
+    getLanguage: () => Promise<AppLanguage>
+    setLanguage: (language: AppLanguage) => Promise<void>
     getSidebarWidth: () => Promise<number>
     setSidebarWidth: (width: number) => Promise<void>
     getSecurity: () => Promise<SecurityConfig>
     setSecurity: (config: SecurityConfig) => Promise<SecurityConfig>
+  }
+  updates: {
+    getState: () => Promise<AppUpdateState>
+    check: () => Promise<AppUpdateState>
+    download: () => Promise<AppUpdateState>
+    install: () => Promise<boolean>
+    onStateChanged: (callback: (state: AppUpdateState) => void) => () => void
   }
   // Window Controls
   window: {

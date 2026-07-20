@@ -13,8 +13,10 @@ import {
 import { useStore } from '../../store/useStore'
 import { format } from 'date-fns'
 import type { Directory } from '../../types'
+import { useI18n } from '../../i18n/I18nProvider'
 
 export const DirectoryView: React.FC = () => {
+  const { t } = useI18n()
   const {
     selectedDirectoryId,
     directoryViewMode,
@@ -95,8 +97,8 @@ export const DirectoryView: React.FC = () => {
   if (!selectedDirectoryId || !currentDir) {
     return (
       <div className="welcome-view">
-        <h2>选择一个目录</h2>
-        <p>从左侧目录树中选择一个目录查看其内容</p>
+        <h2>{t('选择一个目录')}</h2>
+        <p>{t('从左侧目录树中选择一个目录查看其内容')}</p>
       </div>
     )
   }
@@ -112,7 +114,7 @@ export const DirectoryView: React.FC = () => {
           })
           if (!ok) return
         }}>
-          首页
+          {t('首页')}
         </span>
         {breadcrumb.map((item, index) => (
           <React.Fragment key={item.id}>
@@ -137,7 +139,7 @@ export const DirectoryView: React.FC = () => {
           <button
             className="icon-btn"
             onClick={() => setDirectoryViewMode(directoryViewMode === 'card' ? 'list' : 'card')}
-            data-tooltip={directoryViewMode === 'card' ? '列表视图' : '卡片视图'}
+            data-tooltip={directoryViewMode === 'card' ? t('列表视图') : t('卡片视图')}
           >
             {directoryViewMode === 'card' ? <LayoutList size={18} strokeWidth={1.5} /> : <LayoutGrid size={18} strokeWidth={1.5} />}
           </button>
@@ -145,16 +147,16 @@ export const DirectoryView: React.FC = () => {
             className="icon-btn"
             onClick={async () => {
               const result = await window.electronAPI.notes.batchExport(selectedDirectoryId || undefined)
-              if (result?.message) alert(result.message)
+              if (result?.message) alert(t(result.message))
             }}
-            data-tooltip="批量导出"
+            data-tooltip={t('批量导出')}
           >
             <Download size={18} strokeWidth={1.5} />
           </button>
-          <button className="icon-btn" onClick={expandAll} data-tooltip="展开全部">
+          <button className="icon-btn" onClick={expandAll} data-tooltip={t('展开全部')}>
             <ChevronsUpDown size={18} strokeWidth={1.5} />
           </button>
-          <button className="icon-btn" onClick={collapseAll} data-tooltip="折叠全部">
+          <button className="icon-btn" onClick={collapseAll} data-tooltip={t('折叠全部')}>
             <ChevronsDownUp size={18} strokeWidth={1.5} />
           </button>
         </div>
@@ -171,14 +173,14 @@ export const DirectoryView: React.FC = () => {
                 </div>
                 <div className="card-info">
                   <div className="card-title">{dir.name}</div>
-                  <div className="card-meta">{getDirectoryNoteCount(dir.id)} 篇笔记</div>
+                  <div className="card-meta">{t('{count} 篇笔记', { count: getDirectoryNoteCount(dir.id) })}</div>
                 </div>
               </div>
             ) : (
               <div key={dir.id} className="directory-list-item" onClick={() => handleDirClick(dir)}>
                 <Folder size={18} strokeWidth={1.5} />
                 <span className="list-item-title">{dir.name}</span>
-                <span className="list-item-meta">{getDirectoryNoteCount(dir.id)} 篇笔记</span>
+                <span className="list-item-meta">{t('{count} 篇笔记', { count: getDirectoryNoteCount(dir.id) })}</span>
               </div>
             )
           ))}
@@ -188,7 +190,7 @@ export const DirectoryView: React.FC = () => {
       {/* Notes */}
       {dirNotes.length > 0 && (
         <div className="note-list-section">
-          <h3>笔记 ({dirNotes.length})</h3>
+          <h3>{t('笔记 ({count})', { count: dirNotes.length })}</h3>
           <div className={directoryViewMode === 'card' ? 'directory-grid' : 'directory-list'}>
             {dirNotes.map(note => (
               directoryViewMode === 'card' ? (
@@ -229,9 +231,9 @@ export const DirectoryView: React.FC = () => {
       {subDirs.length === 0 && dirNotes.length === 0 && (
         <div className="empty-state" style={{ paddingTop: 64 }}>
           <FolderOpen size={48} strokeWidth={1.5} />
-          <p>此目录为空</p>
+          <p>{t('此目录为空')}</p>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-            在左侧目录树中右键可以新建笔记
+            {t('在左侧目录树中右键可以新建笔记')}
           </p>
         </div>
       )}

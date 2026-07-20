@@ -1,5 +1,6 @@
 import React from 'react'
 import { Search } from 'lucide-react'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface Props {
   value: string
@@ -7,7 +8,8 @@ interface Props {
   placeholder?: string
 }
 
-export const SearchBar: React.FC<Props> = ({ value, onChange, placeholder = '搜索...' }) => {
+export const SearchBar: React.FC<Props> = ({ value, onChange, placeholder }) => {
+  const { t } = useI18n()
   return (
     <div className="search-bar">
       <div className="search-wrapper">
@@ -16,7 +18,7 @@ export const SearchBar: React.FC<Props> = ({ value, onChange, placeholder = '搜
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
+          placeholder={placeholder ?? t('搜索...')}
         />
       </div>
     </div>

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { ConfirmDialog } from '../Dialogs/ConfirmDialog'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface TrashItem {
   type: 'directory' | 'note'
@@ -23,6 +24,7 @@ interface RecycleBinProps {
 }
 
 export const RecycleBin: React.FC<RecycleBinProps> = ({ onTrashLoaded }) => {
+  const { t, locale } = useI18n()
   const { loadData, currentNote, setCurrentNote, setViewMode, runAfterPendingSave } = useStore()
   const [trashItems, setTrashItems] = useState<TrashItem[]>([])
   const [loading, setLoading] = useState(false)
@@ -135,20 +137,20 @@ export const RecycleBin: React.FC<RecycleBinProps> = ({ onTrashLoaded }) => {
       <div className="sidebar-content" style={{ flex: 1, overflow: 'auto' }}>
         {loading && (
           <div className="empty-state" style={{ padding: '16px' }}>
-            <p>加载中...</p>
+            <p>{t('加载中...')}</p>
           </div>
         )}
 
         {!loading && trashItems.length === 0 && (
           <div className="empty-state" style={{ padding: '16px' }}>
             <Trash2 size={24} strokeWidth={1.5} />
-            <p style={{ fontSize: 12 }}>回收站为空</p>
+            <p style={{ fontSize: 12 }}>{t('回收站为空')}</p>
           </div>
         )}
 
         {trashItems.map(item => {
           const displayPath = getDisplayPath(item)
-          const deletedDate = new Date(item.deletedAt).toLocaleDateString()
+          const deletedDate = new Date(item.deletedAt).toLocaleDateString(locale)
 
           return (
           <div
@@ -171,7 +173,7 @@ export const RecycleBin: React.FC<RecycleBinProps> = ({ onTrashLoaded }) => {
                   e.stopPropagation()
                   setConfirmRestore({ id: item.id, type: item.type, name: item.name })
                 }}
-                title="恢复"
+                title={t('恢复')}
               >
                 <RotateCcw size={14} strokeWidth={1.5} />
               </button>
@@ -181,7 +183,7 @@ export const RecycleBin: React.FC<RecycleBinProps> = ({ onTrashLoaded }) => {
                   e.stopPropagation()
                   setConfirmDelete({ id: item.id, type: item.type, name: item.name })
                 }}
-                title="彻底删除"
+                title={t('彻底删除')}
               >
                 <Trash2 size={14} strokeWidth={1.5} />
               </button>
@@ -194,10 +196,10 @@ export const RecycleBin: React.FC<RecycleBinProps> = ({ onTrashLoaded }) => {
       {/* Confirm restore dialog */}
       <ConfirmDialog
         open={confirmRestore !== null}
-        title="恢复确认"
-        message={`确定要恢复「${confirmRestore?.name || ''}」吗？`}
-        confirmText="确认"
-        cancelText="取消"
+        title={t('恢复确认')}
+        message={t('确定要恢复「{name}」吗？', { name: confirmRestore?.name || '' })}
+        confirmText={t('确认')}
+        cancelText={t('取消')}
         onConfirm={handleRestore}
         onCancel={() => setConfirmRestore(null)}
       />
@@ -205,10 +207,10 @@ export const RecycleBin: React.FC<RecycleBinProps> = ({ onTrashLoaded }) => {
       {/* Confirm permanent delete dialog */}
       <ConfirmDialog
         open={confirmDelete !== null}
-        title="彻底删除"
-        message={`确定要彻底删除「${confirmDelete?.name || ''}」吗？此操作不可撤销，所有内容及历史版本将被永久删除。`}
-        confirmText="确认删除"
-        cancelText="取消"
+        title={t('彻底删除')}
+        message={t('确定要彻底删除「{name}」吗？此操作不可撤销，所有内容及历史版本将被永久删除。', { name: confirmDelete?.name || '' })}
+        confirmText={t('确认删除')}
+        cancelText={t('取消')}
         danger
         onConfirm={handlePermanentDelete}
         onCancel={() => setConfirmDelete(null)}
@@ -217,10 +219,10 @@ export const RecycleBin: React.FC<RecycleBinProps> = ({ onTrashLoaded }) => {
       {/* Confirm empty trash dialog */}
       <ConfirmDialog
         open={confirmEmpty}
-        title="清空回收站"
-        message="确定要清空回收站吗？所有内容将被永久删除，此操作不可撤销。"
-        confirmText="确认清空"
-        cancelText="取消"
+        title={t('清空回收站')}
+        message={t('确定要清空回收站吗？所有内容将被永久删除，此操作不可撤销。')}
+        confirmText={t('确认清空')}
+        cancelText={t('取消')}
         danger
         onConfirm={handleEmptyTrash}
         onCancel={() => setConfirmEmpty(false)}

@@ -3,6 +3,7 @@ import path from 'path'
 import { FileManager } from './fileManager'
 import type { NoteMetadata } from '../../src/types'
 import { migrateLegacyBrandReferences } from '../../shared/brand'
+import { translate, type AppLanguage } from '../../shared/i18n'
 
 export class ImportService {
   private fileManager: FileManager
@@ -14,10 +15,10 @@ export class ImportService {
   /**
    * Import a Markdown file into a directory
    */
-  importMdFile(filePath: string, directoryId: string): NoteMetadata {
+  importMdFile(filePath: string, directoryId: string, language: AppLanguage = 'zh-CN'): NoteMetadata {
     const content = migrateLegacyBrandReferences(fs.readFileSync(filePath, 'utf-8'))
     const fileName = path.basename(filePath, path.extname(filePath))
-    const title = fileName || '导入的笔记'
+    const title = fileName || translate(language, '导入的笔记')
 
     const id = this.fileManager.generateId()
     const now = new Date().toISOString()
@@ -163,9 +164,9 @@ export class ImportService {
    * Uses pdf-parse v2.x (PDFParse class) to extract text and images.
    * Processes each page separately to preserve document structure.
    */
-  async importPdfFile(filePath: string, directoryId: string): Promise<NoteMetadata> {
+  async importPdfFile(filePath: string, directoryId: string, language: AppLanguage = 'zh-CN'): Promise<NoteMetadata> {
     const fileName = path.basename(filePath, '.pdf')
-    const title = fileName || '导入的PDF笔记'
+    const title = fileName || translate(language, '导入的PDF笔记')
 
     const id = this.fileManager.generateId()
     const now = new Date().toISOString()
@@ -183,7 +184,7 @@ export class ImportService {
     this.fileManager.addNote(note)
 
     let markdownContent = `# ${title}\n\n`
-    markdownContent += `> 从 PDF 文件导入: ${path.basename(filePath)}\n\n`
+    markdownContent += `> ${translate(language, '从 PDF 文件导入: {file}', { file: path.basename(filePath) })}\n\n`
 
     try {
       const { PDFParse } = require('pdf-parse')
@@ -246,13 +247,13 @@ export class ImportService {
 
       // Add metadata footer
       markdownContent += `\n---\n\n`
-      markdownContent += `*PDF 信息: ${totalPages || '未知'} 页*\n`
+      markdownContent += `*${translate(language, 'PDF 信息: {pages} 页', { pages: totalPages || translate(language, '未知') })}*\n`
 
       try { await parser.destroy() } catch { /* ignore */ }
     } catch (error) {
       console.error('PDF parsing failed:', error)
-      markdownContent += `*PDF 文本提取失败。错误: ${error instanceof Error ? error.message : String(error)}*\n\n`
-      markdownContent += `*你可以手动将 PDF 内容复制粘贴到此笔记中。*\n`
+      markdownContent += `*${translate(language, 'PDF 文本提取失败。错误: {message}', { message: error instanceof Error ? error.message : String(error) })}*\n\n`
+      markdownContent += `*${translate(language, '你可以手动将 PDF 内容复制粘贴到此笔记中。')}*\n`
     }
 
     this.fileManager.writeNoteContent(id, markdownContent)

@@ -16,11 +16,12 @@ import { useStore } from '../../store/useStore'
 import { SearchBar } from './SearchBar'
 import { ConfirmDialog } from '../Dialogs/ConfirmDialog'
 import type { Directory, NoteMetadata } from '../../types'
+import { useI18n } from '../../i18n/I18nProvider'
 
 const leadingTitleRegex = /^(\s*)#\s+[^\n#].*?(?:\s+#*)?\s*(\r?\n|$)/
 
-function setLeadingMarkdownTitle(markdown: string, noteTitle: string): string {
-  const titleLine = `# ${noteTitle.trim() || '无标题'}`
+function setLeadingMarkdownTitle(markdown: string, noteTitle: string, untitled: string): string {
+  const titleLine = `# ${noteTitle.trim() || untitled}`
   if (leadingTitleRegex.test(markdown)) {
     return markdown.replace(leadingTitleRegex, (_match, leading, lineEnd) => `${leading}${titleLine}${lineEnd}`)
   }
@@ -28,6 +29,7 @@ function setLeadingMarkdownTitle(markdown: string, noteTitle: string): string {
 }
 
 export const DirectoryTree: React.FC = () => {
+  const { t } = useI18n()
   const {
     directories,
     notes,
@@ -237,7 +239,7 @@ export const DirectoryTree: React.FC = () => {
         const ok = await runAfterPendingSave(async () => {
           await window.electronAPI.notes.updateTitle(id, nextTitle)
           const noteContent = await window.electronAPI.notes.get(id)
-          const nextContent = setLeadingMarkdownTitle(noteContent.content, nextTitle)
+          const nextContent = setLeadingMarkdownTitle(noteContent.content, nextTitle, t('无标题'))
           if (nextContent !== noteContent.content) {
             await window.electronAPI.notes.update(id, nextContent)
           }
@@ -352,7 +354,7 @@ export const DirectoryTree: React.FC = () => {
               <button
                 className="icon-btn sm"
                 onClick={(e) => { e.stopPropagation(); handleCreateDir(dir.id) }}
-                data-tooltip="新建子目录"
+                data-tooltip={t('新建子目录')}
               >
                 <FolderPlus size={14} strokeWidth={1.5} />
               </button>
@@ -360,7 +362,7 @@ export const DirectoryTree: React.FC = () => {
             <button
               className="icon-btn sm"
               onClick={(e) => { e.stopPropagation(); handleCreateNote(dir.id) }}
-              data-tooltip="新建笔记"
+              data-tooltip={t('新建笔记')}
             >
               <Plus size={14} strokeWidth={1.5} />
             </button>
@@ -387,7 +389,7 @@ export const DirectoryTree: React.FC = () => {
                   })
                   setOpenDirMenuId(openDirMenuId === dir.id ? null : dir.id)
                 }}
-                data-tooltip="更多"
+                data-tooltip={t('更多')}
               >
                 <MoreHorizontal size={14} strokeWidth={1.5} />
               </button>
@@ -406,7 +408,7 @@ export const DirectoryTree: React.FC = () => {
                     }}
                   >
                     <Edit3 size={14} strokeWidth={1.5} />
-                    重命名
+                    {t('重命名')}
                   </button>
                   <button
                     className="note-menu-item"
@@ -417,7 +419,7 @@ export const DirectoryTree: React.FC = () => {
                     }}
                   >
                     <Upload size={14} strokeWidth={1.5} />
-                    导入 MD
+                    {t('导入 MD')}
                   </button>
                   <button
                     className="note-menu-item"
@@ -428,7 +430,7 @@ export const DirectoryTree: React.FC = () => {
                     }}
                   >
                     <FileUp size={14} strokeWidth={1.5} />
-                    导入 PDF
+                    {t('导入 PDF')}
                   </button>
                   <div className="note-menu-separator" />
                   <button
@@ -440,7 +442,7 @@ export const DirectoryTree: React.FC = () => {
                     }}
                   >
                     <Trash2 size={14} strokeWidth={1.5} />
-                    删除
+                    {t('删除')}
                   </button>
                 </div>
               )}
@@ -460,7 +462,7 @@ export const DirectoryTree: React.FC = () => {
                 </span>
                 <input
                   className="context-input"
-                  placeholder={creatingIn.type === 'dir' ? '新目录名称' : '新笔记标题'}
+                  placeholder={creatingIn.type === 'dir' ? t('新目录名称') : t('新笔记标题')}
                   value={createValue}
                   onChange={(e) => setCreateValue(e.target.value)}
                   onBlur={handleConfirmCreate}
@@ -533,7 +535,7 @@ export const DirectoryTree: React.FC = () => {
       <SearchBar
         value={searchQuery}
         onChange={setSearchQuery}
-        placeholder="搜索目录和笔记..."
+        placeholder={t('搜索目录和笔记...')}
       />
 
       <div className="sidebar-create-row">
@@ -546,7 +548,7 @@ export const DirectoryTree: React.FC = () => {
             }}
           >
             <Plus size={17} strokeWidth={2} />
-            新增
+            {t('新增')}
           </button>
           {isCreateMenuOpen && (
             <div className="sidebar-create-dropdown" onClick={(e) => e.stopPropagation()}>
@@ -558,7 +560,7 @@ export const DirectoryTree: React.FC = () => {
                 }}
               >
                 <FolderPlus size={14} strokeWidth={1.5} />
-                新增目录
+                {t('新增目录')}
               </button>
               <button
                 className="note-menu-item"
@@ -569,7 +571,7 @@ export const DirectoryTree: React.FC = () => {
                 }}
               >
                 <FileText size={14} strokeWidth={1.5} />
-                新增笔记
+                {t('新增笔记')}
               </button>
             </div>
           )}
@@ -586,7 +588,7 @@ export const DirectoryTree: React.FC = () => {
             </span>
             <input
               className="context-input"
-              placeholder={creatingIn.type === 'dir' ? '新目录名称' : '新笔记名称'}
+              placeholder={creatingIn.type === 'dir' ? t('新目录名称') : t('新笔记名称')}
               value={createValue}
               onChange={(e) => setCreateValue(e.target.value)}
               onBlur={handleConfirmCreate}
@@ -604,7 +606,7 @@ export const DirectoryTree: React.FC = () => {
         {rootDirs.length === 0 && !creatingIn && (
           <div className="empty-state">
             <Folder size={32} strokeWidth={1.5} />
-            <p>{searchQuery ? '未找到匹配的目录或笔记' : '暂无目录，点击上方新增创建'}</p>
+            <p>{searchQuery ? t('未找到匹配的目录或笔记') : t('暂无目录，点击上方新增创建')}</p>
           </div>
         )}
       </div>
@@ -612,14 +614,14 @@ export const DirectoryTree: React.FC = () => {
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         open={deleteConfirm !== null}
-        title="移入回收站"
+        title={t('移入回收站')}
         message={
           deleteConfirm?.type === 'dir'
-            ? `确定要将目录「${deleteConfirm?.name || ''}」及其所有内容移入回收站吗？`
-            : `确定要将笔记「${deleteConfirm?.name || ''}」移入回收站吗？`
+            ? t('确定要将目录「{name}」及其所有内容移入回收站吗？', { name: deleteConfirm?.name || '' })
+            : t('确定要将笔记「{name}」移入回收站吗？', { name: deleteConfirm?.name || '' })
         }
-        confirmText="确认"
-        cancelText="取消"
+        confirmText={t('确认')}
+        cancelText={t('取消')}
         danger
         onConfirm={handleConfirmDelete}
         onCancel={() => setDeleteConfirm(null)}

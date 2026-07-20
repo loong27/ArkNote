@@ -1,6 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
+import { normalizeLanguage, type AppLanguage } from '../../shared/i18n'
 
 /**
  * AppConfig manages non-encrypted application settings.
@@ -35,6 +36,8 @@ export interface AppConfigData {
   closeAction: CloseAction
   /** Theme: dark or light */
   theme: ThemeMode
+  /** User interface language */
+  language: AppLanguage
   /** Sidebar panel width percentage */
   sidebarWidth: number
   /** Minutes of inactivity before locking; 0 disables idle locking */
@@ -87,6 +90,7 @@ export class AppConfig {
           windowBounds: parsed.windowBounds,
           closeAction: parsed.closeAction || 'ask',
           theme: parsed.theme || 'dark',
+          language: normalizeLanguage(parsed.language),
           sidebarWidth: this.clampSidebarWidth(parsed.sidebarWidth),
           autoLockMinutes: this.clampAutoLockMinutes(parsed.autoLockMinutes),
           lockOnMinimize: parsed.lockOnMinimize !== false,
@@ -101,6 +105,7 @@ export class AppConfig {
       dataDir: existingDefaultDataDir,
       closeAction: 'ask',
       theme: 'dark',
+      language: 'zh-CN',
       sidebarWidth: 15,
       autoLockMinutes: 15,
       lockOnMinimize: true,
@@ -209,6 +214,15 @@ export class AppConfig {
    */
   setTheme(theme: ThemeMode): void {
     this.config.theme = theme
+    this.save()
+  }
+
+  getLanguage(): AppLanguage {
+    return this.config.language
+  }
+
+  setLanguage(language: AppLanguage): void {
+    this.config.language = normalizeLanguage(language)
     this.save()
   }
 

@@ -6,15 +6,17 @@ import { TagList } from './TagList'
 import { RecycleBin } from './RecycleBin'
 import { DefaultAvatar } from '../common/DefaultAvatar'
 import type { SidebarTab } from '../../types'
+import { useI18n } from '../../i18n/I18nProvider'
 
 export const Sidebar: React.FC = () => {
+  const { t } = useI18n()
   const { sidebarTab, setSidebarTab, openSettingsDialog } = useStore()
   const [trashHasItems, setTrashHasItems] = useState(false)
 
   const mainTabs: { id: SidebarTab; icon: React.ReactNode; label: string }[] = [
-    { id: 'files', icon: <FolderTree size={18} strokeWidth={1.6} />, label: '全部笔记' },
-    { id: 'tags', icon: <Tag size={18} strokeWidth={1.6} />, label: '标签' },
-    { id: 'trash', icon: <Trash2 size={18} strokeWidth={1.6} />, label: '回收站' },
+    { id: 'files', icon: <FolderTree size={18} strokeWidth={1.6} />, label: t('全部笔记') },
+    { id: 'tags', icon: <Tag size={18} strokeWidth={1.6} />, label: t('标签') },
+    { id: 'trash', icon: <Trash2 size={18} strokeWidth={1.6} />, label: t('回收站') },
   ]
 
   const handleTrashRefresh = () => {
@@ -56,10 +58,10 @@ export const Sidebar: React.FC = () => {
           <button
             className="sidebar-rail-item"
             onClick={openSettingsDialog}
-            title="设置"
+            title={t('设置')}
           >
             <Settings size={18} strokeWidth={1.6} />
-            <span>设置</span>
+            <span>{t('设置')}</span>
           </button>
         </div>
       </nav>
@@ -70,11 +72,11 @@ export const Sidebar: React.FC = () => {
         {sidebarTab === 'trash' && (
           <>
             <div className="sidebar-panel-actions">
-              <button className="icon-btn sm" onClick={handleTrashRefresh} title="刷新">
+              <button className="icon-btn sm" onClick={handleTrashRefresh} title={t('刷新')}>
                 <RefreshCw size={14} strokeWidth={1.5} />
               </button>
               {trashHasItems && (
-                <button className="icon-btn sm danger" onClick={handleTrashEmpty} title="清空回收站">
+                <button className="icon-btn sm danger" onClick={handleTrashEmpty} title={t('清空回收站')}>
                   <Trash2 size={14} strokeWidth={1.5} />
                 </button>
               )}

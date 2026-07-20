@@ -1,5 +1,4 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { BookOpen } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { Sidebar } from './Sidebar/Sidebar'
 import { NoteView } from './NoteView/NoteView'
@@ -11,8 +10,11 @@ import { TagDialog } from './Dialogs/TagDialog'
 import { VersionDialog } from './Dialogs/VersionDialog'
 import { SettingsDialog } from './Dialogs/SettingsDialog'
 import type { SecurityConfig } from '../types'
+import { DefaultAvatar } from './common/DefaultAvatar'
+import { useI18n } from '../i18n/I18nProvider'
 
 export const Layout: React.FC = () => {
+  const { t } = useI18n()
   const {
     viewMode,
     sidebarWidth,
@@ -234,21 +236,21 @@ export const Layout: React.FC = () => {
 
           {viewMode === 'welcome' && (
             <div className="welcome-view">
-              <BookOpen size={64} strokeWidth={1.5} color="var(--accent)" />
-              <h2><span>ZZ</span>-Note</h2>
-              <p>安全、加密的跨平台笔记应用</p>
+              <DefaultAvatar alt="arkNote" size={64} />
+              <h2>arkNote</h2>
+              <p>{t('安全、加密的跨平台笔记应用')}</p>
               <div className="shortcuts">
                 <div className="shortcut">
                   <kbd>Ctrl + S</kbd>
-                  <span>保存版本</span>
+                  <span>{t('保存版本')}</span>
                 </div>
                 <div className="shortcut">
                   <kbd>Ctrl + F</kbd>
-                  <span>笔记内搜索</span>
+                  <span>{t('笔记内搜索')}</span>
                 </div>
                 <div className="shortcut">
                   <kbd>Ctrl + V</kbd>
-                  <span>粘贴图片</span>
+                  <span>{t('粘贴图片')}</span>
                 </div>
               </div>
             </div>

@@ -20,6 +20,7 @@ import { EditorToolbar } from './EditorToolbar'
 import type { SearchMatch } from '../../types'
 import { EditorView } from '@codemirror/view'
 import { migrateLegacyBrandReferences } from '../../../shared/brand'
+import { useI18n } from '../../i18n/I18nProvider'
 
 // Initialize markdown-it with HTML support + task lists
 const md = new MarkdownIt({
@@ -123,8 +124,8 @@ function getLeadingMarkdownTitle(markdown: string): string | null {
   return leadingTitleCaptureRegex.exec(markdown)?.[1]?.trim() || null
 }
 
-function setLeadingMarkdownTitle(markdown: string, noteTitle: string): string {
-  const titleLine = `# ${noteTitle.trim() || '无标题'}`
+function setLeadingMarkdownTitle(markdown: string, noteTitle: string, untitled: string): string {
+  const titleLine = `# ${noteTitle.trim() || untitled}`
   if (leadingTitleRegex.test(markdown)) {
     return markdown.replace(leadingTitleRegex, (_match, leading, lineEnd) => `${leading}${titleLine}${lineEnd}`)
   }
@@ -169,6 +170,7 @@ function applyImageDimensionAttributes(html: string): string {
 }
 
 export const NoteView: React.FC = () => {
+  const { t } = useI18n()
   // Granular store selectors — only re-render when the specific slice changes
   const currentNote = useStore(s => s.currentNote)
   const isTrashNote = useStore(s => s.isTrashNote)
@@ -563,7 +565,7 @@ export const NoteView: React.FC = () => {
         await window.electronAPI.notes.update(noteId, nextContent)
         markSaveSucceeded(noteId)
       } catch (error) {
-        const message = error instanceof Error ? error.message : '保存失败'
+        const message = error instanceof Error ? error.message : t('保存失败')
         markSaveFailed(noteId, message)
         throw error
       } finally {
@@ -595,7 +597,7 @@ export const NoteView: React.FC = () => {
           await window.electronAPI.versions.save(currentNote.id)
           markSaveSucceeded(currentNote.id)
         } catch (error) {
-          const message = error instanceof Error ? error.message : '保存版本失败'
+          const message = error instanceof Error ? error.message : t('保存版本失败')
           markSaveFailed(currentNote.id, message)
           throw error
         }
@@ -628,7 +630,7 @@ export const NoteView: React.FC = () => {
     if (currentNote) {
       const migratedContent = migrateLegacyBrandReferences(currentNote.content)
       const syncedContent = !isTrashNote
-        ? setLeadingMarkdownTitle(migratedContent, currentNote.metadata.title)
+        ? setLeadingMarkdownTitle(migratedContent, currentNote.metadata.title, t('无标题'))
         : migratedContent
       setContent(syncedContent)
       latestContentRef.current = syncedContent
@@ -652,7 +654,7 @@ export const NoteView: React.FC = () => {
       await window.electronAPI.versions.save(currentNote.id)
       markSaveSucceeded(currentNote.id)
     } catch (error) {
-      const message = error instanceof Error ? error.message : '保存版本失败'
+      const message = error instanceof Error ? error.message : t('保存版本失败')
       markSaveFailed(currentNote.id, message)
     }
   }, [currentNote, flushCurrentNote, isTrashNote, markSaveFailed, markSaveSucceeded])
@@ -662,7 +664,7 @@ export const NoteView: React.FC = () => {
     if (isTrashNote) return
     setTitle(newTitle)
     if (currentNote) {
-      const nextContent = setLeadingMarkdownTitle(latestContentRef.current, newTitle)
+      const nextContent = setLeadingMarkdownTitle(latestContentRef.current, newTitle, t('无标题'))
       setContent(nextContent)
       latestContentRef.current = nextContent
       markNoteDirty(currentNote.id)
@@ -679,7 +681,7 @@ export const NoteView: React.FC = () => {
         await window.electronAPI.notes.updateTitle(currentNote.id, newTitle)
         await loadData()
       } catch (error) {
-        const message = error instanceof Error ? error.message : '标题保存失败'
+        const message = error instanceof Error ? error.message : t('标题保存失败')
         markSaveFailed(currentNote.id, message)
       }
     }
@@ -726,17 +728,17 @@ export const NoteView: React.FC = () => {
   const noteActions = (
     <div className="note-actions">
       {!isTrashNote && (
-        <button className="icon-btn" onClick={handleManualSave} data-tooltip="保存版本 (Ctrl+S)">
+        <button className="icon-btn" onClick={handleManualSave} data-tooltip={t('保存版本 (Ctrl+S)')}>
           <Save size={18} strokeWidth={1.5} />
         </button>
       )}
 
       {!isTrashNote && saveState.noteId === currentNote.id && saveState.phase !== 'idle' && (
         <span className={`note-save-status ${saveState.phase === 'error' ? 'error' : ''}`}>
-          {saveState.phase === 'dirty' && '未保存'}
-          {saveState.phase === 'saving' && '保存中...'}
-          {saveState.phase === 'saved' && '已保存'}
-          {saveState.phase === 'error' && `保存失败：${saveState.errorMessage || '请重试'}`}
+          {saveState.phase === 'dirty' && t('未保存')}
+          {saveState.phase === 'saving' && t('保存中...')}
+          {saveState.phase === 'saved' && t('已保存')}
+          {saveState.phase === 'error' && t('保存失败：{message}', { message: t(saveState.errorMessage || '请重试') })}
         </span>
       )}
 
@@ -750,7 +752,7 @@ export const NoteView: React.FC = () => {
             }}
           >
             <Edit3 size={14} strokeWidth={1.5} style={{ marginRight: 4 }} />
-            编辑
+            {t('编辑')}
           </button>
           <button
             className={isEditing && livePreview ? 'active' : ''}
@@ -760,7 +762,7 @@ export const NoteView: React.FC = () => {
             }}
           >
             <Columns2 size={14} strokeWidth={1.5} style={{ marginRight: 4 }} />
-            分栏
+            {t('分栏')}
           </button>
           <button
             className={!isEditing ? 'active' : ''}
@@ -770,7 +772,7 @@ export const NoteView: React.FC = () => {
             }}
           >
             <Eye size={14} strokeWidth={1.5} style={{ marginRight: 4 }} />
-            预览
+            {t('预览')}
           </button>
         </div>
       )}
@@ -785,7 +787,7 @@ export const NoteView: React.FC = () => {
         <div className="note-toolbar">
           <div className="note-toolbar-left">
             {/* Breadcrumb path */}
-            <span className="breadcrumb-item trash-badge">回收站</span>
+            <span className="breadcrumb-item trash-badge">{t('回收站')}</span>
             {breadcrumbPath.length === 0 && (
               <ChevronRight size={12} strokeWidth={1.5} className="breadcrumb-separator" />
             )}
@@ -802,7 +804,7 @@ export const NoteView: React.FC = () => {
               className="note-title-input"
               value={title}
               onChange={(e) => handleTitleChange(e.target.value)}
-              placeholder="无标题"
+              placeholder={t('无标题')}
               readOnly
             />
 
@@ -869,11 +871,11 @@ export const NoteView: React.FC = () => {
 
       {imagePopupSrc && ReactDOM.createPortal(
         <div className="image-lightbox-overlay" onClick={closeImagePopup}>
-          <button className="image-lightbox-close" onClick={closeImagePopup} aria-label="关闭原图预览">
+          <button className="image-lightbox-close" onClick={closeImagePopup} aria-label={t('关闭原图预览')}>
             <X size={22} strokeWidth={1.8} />
           </button>
           <div className="image-lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <img src={imagePopupSrc} alt={imagePopupAlt || '原图预览'} />
+            <img src={imagePopupSrc} alt={imagePopupAlt || t('原图预览')} />
           </div>
         </div>,
         document.body

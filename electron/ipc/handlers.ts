@@ -13,7 +13,9 @@ import { SyncService } from '../services/syncService'
 import { TrashService } from '../services/trashService'
 import { ImportService } from '../services/importService'
 import { AppConfig } from '../services/appConfig'
+import { VaultRestoreService } from '../services/vaultRestoreService'
 import { migrateLegacyBrandReferences } from '../../shared/brand'
+import { translate } from '../../shared/i18n'
 import {
   AuthAttemptLimiter,
   createVaultAuthKey,
@@ -41,9 +43,11 @@ export function registerIpcHandlers(
   const pdfService = new PdfService()
   const trashService = new TrashService(fileManager)
   const importService = new ImportService(fileManager)
+  const vaultRestoreService = new VaultRestoreService(dataDir)
   let pendingAutoSyncResolver: ((ok: boolean) => void) | null = null
   let pendingAutoSyncTimeout: NodeJS.Timeout | null = null
   const authLimiter = new AuthAttemptLimiter(createVaultAuthKey(dataDir), appConfig)
+  const tr = (source: string) => translate(appConfig.getLanguage(), source)
 
   const reloadDataCaches = () => {
     fileManager.clearCache()
@@ -201,6 +205,21 @@ export function registerIpcHandlers(
 
   ipcMain.handle('auth:getUnlockStatus', async () => authLimiter.getStatus())
 
+  ipcMain.handle('auth:restoreFromGit', async (_event, request) => {
+    return authLimiter.runExclusive(async () => {
+      if (!encryption.isFirstTime()) {
+        return { success: false, message: '本地已有加密数据，不能执行首次恢复' }
+      }
+
+      const result = await vaultRestoreService.restore({
+        repoUrl: typeof request?.repoUrl === 'string' ? request.repoUrl : '',
+        branch: typeof request?.branch === 'string' ? request.branch : 'main',
+      })
+      if (result.success) authLimiter.reset()
+      return result
+    })
+  })
+
   ipcMain.handle('auth:lock', async () => {
     lockVault()
   })
@@ -282,9 +301,9 @@ export function registerIpcHandlers(
     if (!win) return null
 
     const result = await dialog.showOpenDialog(win, {
-      title: '选择数据存储目录',
+      title: tr('选择数据存储目录'),
       properties: ['openDirectory', 'createDirectory'],
-      buttonLabel: '选择此目录',
+      buttonLabel: tr('选择此目录'),
     })
 
     if (result.canceled || result.filePaths.length === 0) return null
@@ -302,6 +321,7 @@ export function registerIpcHandlers(
       defaultDataDir: AppConfig.getDefaultDataDir(),
       configPath: AppConfig.getConfigPath(),
       theme: appConfig.getTheme(),
+      language: appConfig.getLanguage(),
       sidebarWidth: appConfig.getSidebarWidth(),
       autoLockMinutes: security.autoLockMinutes,
       lockOnMinimize: security.lockOnMinimize,
@@ -324,6 +344,16 @@ export function registerIpcHandlers(
 
   ipcMain.handle('config:setTheme', async (_event, theme: 'dark' | 'light') => {
     appConfig.setTheme(theme)
+  })
+
+  ipcMain.handle('config:getLanguage', async () => appConfig.getLanguage())
+
+  ipcMain.handle('config:setLanguage', async (_event, language) => {
+    appConfig.setLanguage(language)
+    ipcMain.emit('config:language-changed')
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) win.webContents.send('config:language-changed')
+    }
   })
 
   ipcMain.handle('config:getSidebarWidth', async () => {
@@ -417,7 +447,7 @@ export function registerIpcHandlers(
     if (!win) return
 
     const result = await dialog.showSaveDialog(win, {
-      title: '下载笔记',
+      title: tr('下载笔记'),
       defaultPath: `${note.metadata.title}.md`,
       filters: [{ name: 'Markdown', extensions: ['md'] }],
     })
@@ -433,9 +463,9 @@ export function registerIpcHandlers(
     if (!win) return { success: false, message: '窗口未找到' }
 
     const result = await dialog.showOpenDialog(win, {
-      title: '选择导出目录',
+      title: tr('选择导出目录'),
       properties: ['openDirectory', 'createDirectory'],
-      buttonLabel: '导出到此目录',
+      buttonLabel: tr('导出到此目录'),
     })
 
     if (result.canceled || result.filePaths.length === 0) {
@@ -509,7 +539,7 @@ export function registerIpcHandlers(
     if (!win) return
 
     const result = await dialog.showSaveDialog(win, {
-      title: '导出为PDF',
+      title: tr('导出为PDF'),
       defaultPath: `${note.metadata.title}.pdf`,
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
     })
@@ -610,9 +640,9 @@ export function registerIpcHandlers(
     if (!win) return null
 
     const result = await dialog.showOpenDialog(win, {
-      title: '选择图片',
+      title: tr('选择图片'),
       filters: [
-        { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'] },
+        { name: tr('图片'), extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'] },
       ],
       properties: ['openFile'],
     })
@@ -676,7 +706,7 @@ export function registerIpcHandlers(
     if (!win) return { success: false, message: '窗口未找到' }
 
     const result = await dialog.showOpenDialog(win, {
-      title: '导入 Markdown 文件',
+      title: tr('导入 Markdown 文件'),
       filters: [
         { name: 'Markdown', extensions: ['md', 'markdown', 'txt'] },
       ],
@@ -690,7 +720,7 @@ export function registerIpcHandlers(
     try {
       let lastNoteId = ''
       for (const filePath of result.filePaths) {
-        const note = importService.importMdFile(filePath, directoryId)
+        const note = importService.importMdFile(filePath, directoryId, appConfig.getLanguage())
         searchService.upsertNote(note.id)
         lastNoteId = note.id
       }
@@ -712,10 +742,10 @@ export function registerIpcHandlers(
     if (!win) return { success: false, message: '窗口未找到' }
 
     const result = await dialog.showOpenDialog(win, {
-      title: '导入 PDF 文件',
+      title: tr('导入 PDF 文件'),
       filters: [
-        { name: 'PDF 文件', extensions: ['pdf', 'PDF'] },
-        { name: '所有文件', extensions: ['*'] },
+        { name: tr('PDF 文件'), extensions: ['pdf', 'PDF'] },
+        { name: tr('所有文件'), extensions: ['*'] },
       ],
       properties: ['openFile', 'multiSelections'],
     })
@@ -727,7 +757,7 @@ export function registerIpcHandlers(
     try {
       let lastNoteId = ''
       for (const filePath of result.filePaths) {
-        const note = await importService.importPdfFile(filePath, directoryId)
+        const note = await importService.importPdfFile(filePath, directoryId, appConfig.getLanguage())
         searchService.upsertNote(note.id)
         lastNoteId = note.id
       }

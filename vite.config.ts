@@ -18,7 +18,7 @@ export default defineConfig({
           build: {
             outDir: 'dist-electron',
             rollupOptions: {
-              external: ['simple-git', 'pdf-parse'],
+              external: ['simple-git', 'pdf-parse', 'electron-updater'],
             },
           },
         },

@@ -1,6 +1,6 @@
 {
   "name": "ark-note",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A secure, cross-platform encrypted note-taking application",
   "author": {
     "name": "Eric",
@@ -14,9 +14,12 @@
     "verify:icons": "node scripts/verify-icons.mjs",
     "test:brand": "node scripts/test-branding.mjs",
     "test:auth": "node scripts/test-auth-security.mjs",
+    "test:restore": "node scripts/test-vault-restore.mjs",
+    "test:updater": "node scripts/test-updater-config.mjs",
+    "test:i18n": "node scripts/test-i18n.mjs",
     "test:sync": "node scripts/test-sync-service.mjs",
     "test:markdown": "node scripts/test-markdown-renderer.mjs",
-    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:sync && npm run test:markdown && vite build",
+    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:restore && npm run test:updater && npm run test:i18n && npm run test:sync && npm run test:markdown && vite build",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win nsis --x64 --ia32",
     "package:mac": "npm run build && electron-builder --mac",
@@ -34,6 +37,7 @@
     "codemirror": "^6.0.1",
     "date-fns": "^4.1.0",
     "dompurify": "^3.4.8",
+    "electron-updater": "^6.8.9",
     "harmonyos-sans-sc-webfont-splitted": "^1.1.0",
     "lucide-react": "^0.468.0",
     "markdown-it": "^14.1.0",
@@ -70,6 +74,13 @@
   "build": {
     "appId": "com.arknote.app",
     "productName": "arkNote",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "loong27",
+        "repo": "ArkNote"
+      }
+    ],
     "asar": true,
     "directories": {
       "output": "release"

@@ -113,7 +113,7 @@ jobs:
           TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
         run: |
           shopt -s nullglob
-          files=(release/*.AppImage release/*.deb release/*.rpm)
+          files=(release/*.AppImage release/*.deb release/*.rpm release/*.blockmap release/latest*.yml)
           if [ ${#files[@]} -eq 0 ]; then
             echo "No Linux package files found."
             exit 1
@@ -156,7 +156,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
         run: |
-          $files = Get-ChildItem -Path release -Filter *.exe | ForEach-Object { $_.FullName }
+          $files = @(
+            Get-ChildItem -Path release -Filter *.exe
+            Get-ChildItem -Path release -Filter *.blockmap
+            Get-ChildItem -Path release -Filter latest*.yml
+          ) | Select-Object -ExpandProperty FullName -Unique
           if ($files.Count -eq 0) {
             Write-Error "No Windows installer files found."
             exit 1

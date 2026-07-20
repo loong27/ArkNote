@@ -2,10 +2,12 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react'
 import { Search, Filter, X, ChevronRight, Folder, Check } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import type { SearchResult } from '../../types'
+import { useI18n } from '../../i18n/I18nProvider'
 
 const GLOBAL_SEARCH_TOTAL_LIMIT = 20
 
 export const GlobalSearch: React.FC = () => {
+  const { t } = useI18n()
   const {
     directories,
     globalSearchQuery,
@@ -88,7 +90,7 @@ export const GlobalSearch: React.FC = () => {
             type="text"
             value={globalSearchQuery}
             onChange={(e) => setGlobalSearchQuery(e.target.value)}
-            placeholder="在所有笔记中搜索..."
+            placeholder={t('在所有笔记中搜索...')}
           />
         </div>
       </div>
@@ -97,13 +99,13 @@ export const GlobalSearch: React.FC = () => {
       <div className="global-search-filters" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span>
           {globalSearchDirIds.length > 0
-            ? `在 ${globalSearchDirIds.length} 个目录中搜索`
-            : '在所有笔记中搜索'}
+            ? t('在 {count} 个目录中搜索', { count: globalSearchDirIds.length })
+            : t('在所有笔记中搜索')}
         </span>
         <button
           className="icon-btn sm"
           onClick={() => setShowFilters(!showFilters)}
-          data-tooltip="选择搜索范围"
+          data-tooltip={t('选择搜索范围')}
         >
           <Filter size={14} strokeWidth={1.5} />
         </button>
@@ -118,7 +120,7 @@ export const GlobalSearch: React.FC = () => {
           overflowY: 'auto',
         }}>
           <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-            选择搜索范围 (不选则搜索全部)
+            {t('选择搜索范围 (不选则搜索全部)')}
             {globalSearchDirIds.length > 0 && (
               <button
                 className="icon-btn sm"
@@ -156,14 +158,14 @@ export const GlobalSearch: React.FC = () => {
       <div className="global-search-results">
         {searching && (
           <div className="empty-state">
-            <p>搜索中...</p>
+            <p>{t('搜索中...')}</p>
           </div>
         )}
 
         {!searching && globalSearchQuery && globalSearchResults.length === 0 && (
           <div className="empty-state">
             <Search size={32} strokeWidth={1.5} />
-            <p>未找到匹配结果</p>
+            <p>{t('未找到匹配结果')}</p>
           </div>
         )}
 
@@ -174,15 +176,15 @@ export const GlobalSearch: React.FC = () => {
             onClick={() => handleResultClick(result)}
           >
             <div className="search-result-title">{result.noteTitle}</div>
-            <div className="search-result-path">{result.directoryPath}</div>
+            <div className="search-result-path">{t(result.directoryPath)}</div>
             {result.matches.slice(0, 3).map((match, i) => (
               <div key={i} className="search-result-match">
-                第{match.line}行: {match.context.substring(0, 100)}
+                {t('第 {line} 行: {context}', { line: match.line, context: t(match.context.substring(0, 100)) })}
               </div>
             ))}
             {result.matches.length > 3 && (
               <div className="search-result-match" style={{ color: 'var(--text-muted)' }}>
-                ...还有 {result.matches.length - 3} 处匹配
+                {t('...还有 {count} 处匹配', { count: result.matches.length - 3 })}
               </div>
             )}
           </div>
@@ -191,7 +193,7 @@ export const GlobalSearch: React.FC = () => {
         {!globalSearchQuery && (
           <div className="empty-state">
             <Search size={32} strokeWidth={1.5} />
-            <p>输入关键词搜索所有笔记</p>
+            <p>{t('输入关键词搜索所有笔记')}</p>
           </div>
         )}
       </div>

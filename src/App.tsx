@@ -3,6 +3,7 @@ import { useStore } from './store/useStore'
 import { PasswordDialog } from './components/PasswordDialog'
 import { Layout } from './components/Layout'
 import { TitleBar } from './components/TitleBar'
+import { UpdateNotice } from './components/UpdateNotice'
 
 const App: React.FC = () => {
   const isLocked = useStore(s => s.isLocked)
@@ -11,6 +12,7 @@ const App: React.FC = () => {
     <div className="app-root">
       <TitleBar />
       {isLocked ? <PasswordDialog /> : <Layout />}
+      <UpdateNotice />
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
-import { X, FolderOpen, Key, HardDrive, AlertTriangle, RefreshCw, Monitor, GitBranch, Cloud, CheckCircle, XCircle, LockKeyhole, Clock3 } from 'lucide-react'
+import { X, FolderOpen, Key, HardDrive, AlertTriangle, RefreshCw, Monitor, GitBranch, Cloud, CheckCircle, XCircle, LockKeyhole, Clock3, Download, PackageCheck, RotateCcw } from 'lucide-react'
 import { useStore } from '../../store/useStore'
-import type { SyncConfig, SyncStatus, SyncConflict } from '../../types'
+import type { AppUpdateState, SyncConfig, SyncStatus, SyncConflict } from '../../types'
+import { useI18n } from '../../i18n/I18nProvider'
 
 /* Apple HIG icon stroke width constant (matches SF Symbols) */
 const SW = 1.5
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
+  const { language, locale, setLanguage, t } = useI18n()
   const { runAfterPendingSave, loadData, refreshCurrentNote, theme, setTheme } = useStore()
 
   // Data directory state
@@ -37,6 +39,14 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
 
   // Close behavior state
   const [closeAction, setCloseAction] = useState<'ask' | 'minimize' | 'quit'>('ask')
+  const [updateState, setUpdateState] = useState<AppUpdateState>({
+    phase: 'idle',
+    currentVersion: '',
+    availableVersion: null,
+    progress: null,
+    message: '尚未检查更新',
+    checkedAt: null,
+  })
 
   // Sync state
   const [syncConfig, setSyncConfig] = useState<SyncConfig>({
@@ -65,12 +75,13 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     if (!open) return
     const loadConfig = async () => {
       try {
-        const [config, action, sConfig, sStatus, authStatus] = await Promise.all([
+        const [config, action, sConfig, sStatus, authStatus, appUpdate] = await Promise.all([
           window.electronAPI.config.getAll(),
           window.electronAPI.window.getCloseAction(),
           window.electronAPI.sync.getConfig(),
           window.electronAPI.sync.getStatus(),
           window.electronAPI.auth.getUnlockStatus(),
+          window.electronAPI.updates.getState(),
         ])
         setDataDir(config.dataDir)
         setDefaultDataDir(config.defaultDataDir)
@@ -84,6 +95,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
         setPwdRetryUntil(currentTime + authStatus.retryAfterMs)
         setSyncConfig(sConfig)
         setSyncStatus(sStatus)
+        setUpdateState(appUpdate)
         if (sStatus.conflicts && sStatus.conflicts.length > 0) {
           setConflicts(sStatus.conflicts)
         }
@@ -93,6 +105,10 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     }
     loadConfig()
   }, [open])
+
+  useEffect(() => {
+    return window.electronAPI.updates.onStateChanged(setUpdateState)
+  }, [])
 
   useEffect(() => {
     if (pwdRetryUntil <= Date.now()) return
@@ -111,7 +127,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
   // Handle data directory change
   const handleInspectDataDir = async (dir: string) => {
     const result = await window.electronAPI.config.inspectDataDir(dir)
-    setDirInspectMessage(result.message)
+    setDirInspectMessage(t(result.message))
   }
 
   const handleSelectDir = async () => {
@@ -135,17 +151,17 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
         if (result.success) {
           setDirMessage({
             type: 'success',
-            text: `${result.message}。需要重启应用以生效。`,
+            text: t('{message}。需要重启应用以生效。', { message: t(result.message) }),
           })
         } else {
-          setDirMessage({ type: 'error', text: result.message })
+          setDirMessage({ type: 'error', text: t(result.message) })
         }
       })
       if (!ok) return
     } catch (error) {
       setDirMessage({
         type: 'error',
-        text: `操作失败: ${error instanceof Error ? error.message : String(error)}`,
+        text: t('操作失败: {message}', { message: error instanceof Error ? error.message : String(error) }),
       })
     } finally {
       setDirChanging(false)
@@ -161,23 +177,23 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     setPwdMessage({ type: '', text: '' })
 
     if (!oldPassword) {
-      setPwdMessage({ type: 'error', text: '请输入当前密码' })
+      setPwdMessage({ type: 'error', text: t('请输入当前密码') })
       return
     }
     if (!newPassword) {
-      setPwdMessage({ type: 'error', text: '请输入新密码' })
+      setPwdMessage({ type: 'error', text: t('请输入新密码') })
       return
     }
     if (Array.from(newPassword).length < 12) {
-      setPwdMessage({ type: 'error', text: '新密码至少需要 12 个字符' })
+      setPwdMessage({ type: 'error', text: t('新密码至少需要 12 个字符') })
       return
     }
     if (newPassword !== confirmNewPassword) {
-      setPwdMessage({ type: 'error', text: '两次输入的新密码不一致' })
+      setPwdMessage({ type: 'error', text: t('两次输入的新密码不一致') })
       return
     }
     if (oldPassword === newPassword) {
-      setPwdMessage({ type: 'error', text: '新密码不能与旧密码相同' })
+      setPwdMessage({ type: 'error', text: t('新密码不能与旧密码相同') })
       return
     }
 
@@ -187,13 +203,13 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       const ok = await runAfterPendingSave(async () => {
         const result = await window.electronAPI.auth.changePassword(oldPassword, newPassword)
         if (result.success) {
-          setPwdMessage({ type: 'success', text: '密码修改成功！所有文件已使用新密码重新加密。' })
+          setPwdMessage({ type: 'success', text: t('密码修改成功！所有文件已使用新密码重新加密。') })
           setPwdRetryUntil(0)
           setOldPassword('')
           setNewPassword('')
           setConfirmNewPassword('')
         } else {
-          setPwdMessage({ type: 'error', text: result.message || '密码修改失败' })
+          setPwdMessage({ type: 'error', text: t(result.message || '密码修改失败') })
           if (result.retryAfterMs > 0) {
             const currentTime = Date.now()
             setPwdNow(currentTime)
@@ -205,7 +221,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     } catch (error) {
       setPwdMessage({
         type: 'error',
-        text: `密码修改失败: ${error instanceof Error ? error.message : String(error)}`,
+        text: t('密码修改失败: {message}', { message: error instanceof Error ? error.message : String(error) }),
       })
     } finally {
       setPwdChanging(false)
@@ -220,9 +236,9 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       setAutoLockMinutes(config.autoLockMinutes)
       setLockOnMinimize(config.lockOnMinimize)
       window.dispatchEvent(new CustomEvent('arknote:security-config-changed', { detail: config }))
-      setSecurityMessage({ type: 'success', text: '安全设置已保存' })
+      setSecurityMessage({ type: 'success', text: t('安全设置已保存') })
     } catch (error) {
-      setSecurityMessage({ type: 'error', text: `设置保存失败: ${error instanceof Error ? error.message : String(error)}` })
+      setSecurityMessage({ type: 'error', text: t('设置保存失败: {message}', { message: error instanceof Error ? error.message : String(error) }) })
     } finally {
       setSecuritySaving(false)
     }
@@ -232,6 +248,16 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
   const handleCloseActionChange = async (action: 'ask' | 'minimize' | 'quit') => {
     setCloseAction(action)
     await window.electronAPI.window.setCloseAction(action)
+  }
+
+  const handleUpdateAction = async () => {
+    if (updateState.phase === 'available') {
+      setUpdateState(await window.electronAPI.updates.download())
+    } else if (updateState.phase === 'downloaded') {
+      await window.electronAPI.updates.install()
+    } else {
+      setUpdateState(await window.electronAPI.updates.check())
+    }
   }
 
   // Sync handlers
@@ -249,10 +275,10 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       setConflicts(status.conflicts ?? [])
       setSyncMessage({
         type: status.status === 'error' ? 'error' : 'success',
-        text: status.status === 'error' ? status.message : '同步配置已保存',
+        text: status.status === 'error' ? t(status.message) : t('同步配置已保存'),
       })
     } catch (error) {
-      setSyncMessage({ type: 'error', text: `配置失败: ${error instanceof Error ? error.message : String(error)}` })
+      setSyncMessage({ type: 'error', text: t('配置失败: {message}', { message: error instanceof Error ? error.message : String(error) }) })
     }
     setSyncing(false)
   }
@@ -273,12 +299,12 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
         }
         setSyncMessage({
           type: result.status === 'success' ? 'success' : 'error',
-          text: result.message,
+          text: t(result.message),
         })
       })
       if (!ok) return
     } catch (error) {
-      setSyncMessage({ type: 'error', text: `同步失败: ${error instanceof Error ? error.message : String(error)}` })
+      setSyncMessage({ type: 'error', text: t('同步失败: {message}', { message: error instanceof Error ? error.message : String(error) }) })
     } finally {
       setSyncing(false)
     }
@@ -289,7 +315,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       .filter(c => c.resolution)
       .map(c => ({ file: c.file, resolution: c.resolution! }))
     if (resolutions.length !== conflicts.length) {
-      setSyncMessage({ type: 'error', text: '请为每个冲突文件选择保留版本' })
+      setSyncMessage({ type: 'error', text: t('请为每个冲突文件选择保留版本') })
       return
     }
     setSyncing(true)
@@ -301,17 +327,17 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
           await loadData()
           await refreshCurrentNote()
           setConflicts([])
-          setSyncMessage({ type: 'success', text: '冲突已解决，数据已更新' })
+          setSyncMessage({ type: 'success', text: t('冲突已解决，数据已更新') })
         } else if (result.status === 'conflict') {
           setConflicts(result.conflicts ?? [])
-          setSyncMessage({ type: 'error', text: result.message })
+          setSyncMessage({ type: 'error', text: t(result.message) })
         } else {
-          setSyncMessage({ type: 'error', text: result.message })
+          setSyncMessage({ type: 'error', text: t(result.message) })
         }
       })
       if (!ok) return
     } catch (error) {
-      setSyncMessage({ type: 'error', text: `解决冲突失败: ${error instanceof Error ? error.message : String(error)}` })
+      setSyncMessage({ type: 'error', text: t('解决冲突失败: {message}', { message: error instanceof Error ? error.message : String(error) }) })
     } finally {
       setSyncing(false)
     }
@@ -323,7 +349,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     <div className="dialog-overlay" onClick={onClose}>
       <div className="dialog" style={{ width: '560px' }} onClick={(e) => e.stopPropagation()}>
         <div className="dialog-header">
-          <h3>设置</h3>
+          <h3>{t('设置')}</h3>
           <button className="icon-btn" onClick={onClose}>
             <X size={18} strokeWidth={SW} />
           </button>
@@ -342,7 +368,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             style={{ flex: 'none', padding: '6px 14px', borderBottom: 'none' }}
           >
             <Monitor size={15} strokeWidth={SW} />
-            <span>通用</span>
+            <span>{t('通用')}</span>
           </button>
           <button
             className={`sidebar-tab ${activeTab === 'storage' ? 'active' : ''}`}
@@ -350,7 +376,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             style={{ flex: 'none', padding: '6px 14px', borderBottom: 'none' }}
           >
             <HardDrive size={15} strokeWidth={SW} />
-            <span>数据存储</span>
+            <span>{t('数据存储')}</span>
           </button>
           <button
             className={`sidebar-tab ${activeTab === 'password' ? 'active' : ''}`}
@@ -358,7 +384,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             style={{ flex: 'none', padding: '6px 14px', borderBottom: 'none' }}
           >
             <Key size={15} strokeWidth={SW} />
-            <span>密码与安全</span>
+            <span>{t('密码与安全')}</span>
           </button>
           <button
             className={`sidebar-tab ${activeTab === 'sync' ? 'active' : ''}`}
@@ -366,7 +392,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             style={{ flex: 'none', padding: '6px 14px', borderBottom: 'none' }}
           >
             <GitBranch size={15} strokeWidth={SW} />
-            <span>同步</span>
+            <span>{t('同步')}</span>
           </button>
         </div>
 
@@ -376,40 +402,53 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             <div>
               <div style={{ marginBottom: 24 }}>
                 <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
-                  外观
+                  {t('语言')}
                 </h4>
                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
-                  选择应用界面的显示模式。
+                  {t('选择应用界面的显示语言。')}
+                </p>
+                <div className="language-toggle settings-language-toggle" role="group" aria-label={t('语言')}>
+                  <button type="button" className={language === 'zh-CN' ? 'active' : ''} onClick={() => void setLanguage('zh-CN')}>中文</button>
+                  <button type="button" className={language === 'en-US' ? 'active' : ''} onClick={() => void setLanguage('en-US')}>English</button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
+                  {t('外观')}
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+                  {t('选择应用界面的显示模式。')}
                 </p>
                 <div className="theme-toggle">
                   <button
                     className={theme === 'light' ? 'active' : ''}
                     onClick={() => setTheme('light')}
                   >
-                    白天模式
+                    {t('白天模式')}
                   </button>
                   <button
                     className={theme === 'dark' ? 'active' : ''}
                     onClick={() => setTheme('dark')}
                   >
-                    暗夜模式
+                    {t('暗夜模式')}
                   </button>
                 </div>
               </div>
 
               <div style={{ marginBottom: 24 }}>
                 <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
-                  关闭窗口时的操作
+                  {t('关闭窗口时的操作')}
                 </h4>
                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-                  选择点击关闭按钮后的行为。
+                  {t('选择点击关闭按钮后的行为。')}
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {[
-                    { value: 'ask' as const, label: '每次询问', desc: '每次点击关闭按钮时弹出选择对话框' },
-                    { value: 'minimize' as const, label: '最小化到托盘', desc: '直接隐藏窗口，应用在后台继续运行' },
-                    { value: 'quit' as const, label: '退出应用', desc: '直接关闭并退出整个应用程序' },
+                    { value: 'ask' as const, label: t('每次询问'), desc: t('每次点击关闭按钮时弹出选择对话框') },
+                    { value: 'minimize' as const, label: t('最小化到托盘'), desc: t('直接隐藏窗口，应用在后台继续运行') },
+                    { value: 'quit' as const, label: t('退出应用'), desc: t('直接关闭并退出整个应用程序') },
                   ].map(option => (
                     <label
                       key={option.value}
@@ -448,6 +487,43 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   ))}
                 </div>
               </div>
+
+              <div style={{ paddingTop: 20, borderTop: '0.5px solid var(--border)' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
+                  <PackageCheck size={16} strokeWidth={SW} />
+                  {t('应用更新')}
+                </h4>
+                <div className="settings-update-row">
+                  <div className="settings-update-copy">
+                    <span>{t('当前版本 {version}', { version: updateState.currentVersion || '-' })}</span>
+                    <small className={updateState.phase === 'error' ? 'error' : ''}>{t(updateState.message)}</small>
+                  </div>
+                  <button
+                    className="btn"
+                    type="button"
+                    onClick={handleUpdateAction}
+                    disabled={['checking', 'downloading', 'disabled'].includes(updateState.phase)}
+                  >
+                    {updateState.phase === 'available' ? <Download size={14} strokeWidth={SW} />
+                      : updateState.phase === 'downloaded' ? <RotateCcw size={14} strokeWidth={SW} />
+                        : <RefreshCw className={updateState.phase === 'checking' ? 'spin' : ''} size={14} strokeWidth={SW} />}
+                    {updateState.phase === 'available' ? t('下载更新')
+                      : updateState.phase === 'downloaded' ? t('重启安装')
+                        : updateState.phase === 'checking' ? t('检查中')
+                          : t('检查更新')}
+                  </button>
+                </div>
+                {updateState.phase === 'downloading' && (
+                  <div className="update-progress" aria-label={t('下载进度 {progress}%', { progress: Math.round(updateState.progress ?? 0) })}>
+                    <span style={{ width: `${updateState.progress ?? 0}%` }} />
+                  </div>
+                )}
+                {updateState.checkedAt && (
+                  <div className="settings-update-time">
+                    {t('上次检查 {date}', { date: new Date(updateState.checkedAt).toLocaleString(locale) })}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -456,12 +532,10 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             <div>
               <div style={{ marginBottom: 24 }}>
                 <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
-                  数据存储目录
+                  {t('数据存储目录')}
                 </h4>
                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-                  所有笔记、图片、标签和版本历史都加密存储在此目录中。
-                  你可以将此目录指向 Git 仓库、Dropbox、OneDrive 或其他云同步文件夹，
-                  实现多平台数据同步。
+                  {t('所有笔记、图片、标签和版本历史都加密存储在此目录中。你可以将此目录指向 Git 仓库、Dropbox、OneDrive 或其他云同步文件夹，实现多平台数据同步。')}
                 </p>
 
                 <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -481,11 +555,11 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                       outline: 'none',
                       boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.04)',
                     }}
-                    placeholder="选择数据存储目录..."
+                    placeholder={t('选择数据存储目录...')}
                   />
                   <button className="btn" onClick={handleSelectDir}>
                     <FolderOpen size={14} strokeWidth={1.5} />
-                    浏览
+                    {t('浏览')}
                   </button>
                 </div>
 
@@ -500,8 +574,8 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   lineHeight: 1.8,
                   border: '0.5px solid var(--border)',
                 }}>
-                  <div>默认目录: <span style={{ color: 'var(--text-secondary)' }}>{defaultDataDir}</span></div>
-                  <div>配置文件: <span style={{ color: 'var(--text-secondary)' }}>{configPath}</span></div>
+                  <div>{t('默认目录:')} <span style={{ color: 'var(--text-secondary)' }}>{defaultDataDir}</span></div>
+                  <div>{t('配置文件:')} <span style={{ color: 'var(--text-secondary)' }}>{configPath}</span></div>
                 </div>
 
                 {dirInspectMessage && (
@@ -544,7 +618,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                         style={{ marginLeft: 'auto' }}
                       >
                         <RefreshCw size={12} strokeWidth={1.5} />
-                        重启应用
+                        {t('重启应用')}
                       </button>
                     )}
                   </div>
@@ -556,7 +630,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   disabled={dirChanging}
                   style={{ width: '100%' }}
                 >
-                  {dirChanging ? '应用中...' : '应用目录变更'}
+                  {dirChanging ? t('应用中...') : t('应用目录变更')}
                 </button>
               </div>
 
@@ -569,12 +643,12 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                 lineHeight: 1.7,
                 border: '0.5px solid var(--border)',
               }}>
-                <strong style={{ color: 'var(--accent)' }}>💡 多平台同步提示</strong>
+                <strong style={{ color: 'var(--accent)' }}>{t('多平台同步提示')}</strong>
                 <ul style={{ marginTop: 8, paddingLeft: 20 }}>
-                  <li>将数据目录设为 Git 仓库目录，然后通过 GitHub/GitLab 同步</li>
-                  <li>或将数据目录指向 Dropbox / OneDrive / 坚果云等云盘的同步文件夹</li>
-                  <li>所有文件都已加密，即使在云端也是安全的</li>
-                  <li>多台设备使用相同密码即可解锁同一个数据仓库</li>
+                  <li>{t('将数据目录设为 Git 仓库目录，然后通过 GitHub/GitLab 同步')}</li>
+                  <li>{t('或将数据目录指向 Dropbox / OneDrive / 坚果云等云盘的同步文件夹')}</li>
+                  <li>{t('所有文件都已加密，即使在云端也是安全的')}</li>
+                  <li>{t('多台设备使用相同密码即可解锁同一个数据仓库')}</li>
                 </ul>
               </div>
             </div>
@@ -585,24 +659,23 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             <div>
               <div style={{ marginBottom: 24 }}>
                 <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
-                  修改加密密码
+                  {t('修改加密密码')}
                 </h4>
                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-                  修改密码后，所有本地文件将使用新密码重新加密。此操作可能需要一些时间，
-                  具体取决于你的笔记和图片数量。
+                  {t('修改密码后，所有本地文件将使用新密码重新加密。此操作可能需要一些时间，具体取决于你的笔记和图片数量。')}
                 </p>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <div>
                     <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                      当前密码
+                      {t('当前密码')}
                     </label>
                     <input
                       type="password"
                       value={oldPassword}
                       maxLength={256}
                       onChange={(e) => { setOldPassword(e.target.value); setPwdMessage({ type: '', text: '' }) }}
-                      placeholder="输入当前密码"
+                      placeholder={t('输入当前密码')}
                       style={{
                         width: '100%',
                         padding: '10px 14px',
@@ -618,14 +691,14 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
 
                   <div>
                     <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                      新密码（至少 12 个字符）
+                      {t('新密码（至少 12 个字符）')}
                     </label>
                     <input
                       type="password"
                       value={newPassword}
                       maxLength={256}
                       onChange={(e) => { setNewPassword(e.target.value); setPwdMessage({ type: '', text: '' }) }}
-                      placeholder="输入新密码"
+                      placeholder={t('输入新密码')}
                       style={{
                         width: '100%',
                         padding: '10px 14px',
@@ -641,14 +714,14 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
 
                   <div>
                     <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                      确认新密码
+                      {t('确认新密码')}
                     </label>
                     <input
                       type="password"
                       value={confirmNewPassword}
                       maxLength={256}
                       onChange={(e) => { setConfirmNewPassword(e.target.value); setPwdMessage({ type: '', text: '' }) }}
-                      placeholder="再次输入新密码"
+                      placeholder={t('再次输入新密码')}
                       style={{
                         width: '100%',
                         padding: '10px 14px',
@@ -687,24 +760,24 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   style={{ width: '100%', marginTop: 16 }}
                 >
                   {pwdChanging
-                    ? '加密处理中，请稍候...'
+                    ? t('加密处理中，请稍候...')
                     : pwdRetrySeconds > 0
-                      ? `请在 ${pwdRetrySeconds} 秒后重试`
-                      : '修改密码'}
+                      ? t('请在 {seconds} 秒后重试', { seconds: pwdRetrySeconds })
+                      : t('修改密码')}
                 </button>
               </div>
 
               <div style={{ marginBottom: 24, paddingTop: 20, borderTop: '0.5px solid var(--border)' }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
                   <LockKeyhole size={16} strokeWidth={SW} />
-                  自动锁定
+                  {t('自动锁定')}
                 </h4>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: '13px', color: 'var(--text-primary)' }}>
                       <Clock3 size={15} strokeWidth={SW} />
-                      空闲后锁定
+                      {t('空闲后锁定')}
                     </span>
                     <select
                       value={autoLockMinutes}
@@ -723,11 +796,11 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                         outline: 'none',
                       }}
                     >
-                      <option value={0}>从不</option>
-                      <option value={5}>5 分钟</option>
-                      <option value={15}>15 分钟</option>
-                      <option value={30}>30 分钟</option>
-                      <option value={60}>60 分钟</option>
+                      <option value={0}>{t('从不')}</option>
+                      <option value={5}>{t('{minutes} 分钟', { minutes: 5 })}</option>
+                      <option value={15}>{t('{minutes} 分钟', { minutes: 15 })}</option>
+                      <option value={30}>{t('{minutes} 分钟', { minutes: 30 })}</option>
+                      <option value={60}>{t('{minutes} 分钟', { minutes: 60 })}</option>
                     </select>
                   </label>
 
@@ -741,7 +814,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                       }}
                       style={{ accentColor: 'var(--accent)' }}
                     />
-                    最小化或隐藏窗口时锁定
+                    {t('最小化或隐藏窗口时锁定')}
                   </label>
                 </div>
 
@@ -764,7 +837,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   disabled={securitySaving}
                   style={{ width: '100%', marginTop: 14 }}
                 >
-                  {securitySaving ? '保存中...' : '保存安全设置'}
+                  {securitySaving ? t('保存中...') : t('保存安全设置')}
                 </button>
               </div>
 
@@ -777,12 +850,12 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                 lineHeight: 1.7,
                 border: '0.5px solid rgba(255, 159, 10, 0.2)',
               }}>
-                <strong>⚠️ 注意事项</strong>
+                <strong>{t('注意事项')}</strong>
                 <ul style={{ marginTop: 8, paddingLeft: 20 }}>
-                  <li>修改密码会重新加密所有文件（笔记、图片、版本历史）</li>
-                  <li>请务必记住新密码，密码丢失将<strong>无法恢复</strong>数据</li>
-                  <li>如果你使用多平台同步，所有设备都需要使用新密码</li>
-                  <li>处理过程中请勿关闭应用</li>
+                  <li>{t('修改密码会重新加密所有文件（笔记、图片、版本历史）')}</li>
+                  <li>{t('请务必记住新密码，密码丢失将无法恢复数据')}</li>
+                  <li>{t('如果你使用多平台同步，所有设备都需要使用新密码')}</li>
+                  <li>{t('处理过程中请勿关闭应用')}</li>
                 </ul>
               </div>
             </div>
@@ -793,16 +866,16 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             <div>
               <div style={{ marginBottom: 24 }}>
                 <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
-                  同步配置
+                  {t('同步配置')}
                 </h4>
                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-                  配置远程仓库或 OSS 来同步你的加密笔记数据。
+                  {t('配置远程仓库或 OSS 来同步你的加密笔记数据。')}
                 </p>
 
                 {/* Provider selection */}
                 <div style={{ marginBottom: 16 }}>
                   <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 6, display: 'block' }}>
-                    同步方式
+                    {t('同步方式')}
                   </label>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
@@ -817,7 +890,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                       onClick={() => setSyncConfig({ ...syncConfig, provider: 'oss' })}
                       style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}
                     >
-                      <Cloud size={14} strokeWidth={1.5} /> OSS 对象存储
+                      <Cloud size={14} strokeWidth={1.5} /> {t('OSS 对象存储')}
                     </button>
                   </div>
                 </div>
@@ -827,13 +900,13 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
                     <div>
                       <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                        仓库地址（HTTPS 或 SSH）
+                        {t('仓库地址（HTTPS 或 SSH）')}
                       </label>
                       <input
                         type="text"
                         value={syncConfig.repoUrl}
                         onChange={(e) => setSyncConfig({ ...syncConfig, repoUrl: e.target.value })}
-                        placeholder="https://github.com/user/repo.git 或 git@github.com:user/repo.git"
+                        placeholder={t('https://github.com/user/repo.git 或 git@github.com:user/repo.git')}
                         style={{
                           width: '100%', padding: '10px 14px',
                           background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
@@ -844,7 +917,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                     </div>
                     <div>
                       <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                        分支名称
+                        {t('分支名称')}
                       </label>
                       <input
                         type="text"
@@ -885,7 +958,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                     <div style={{ display: 'flex', gap: 12 }}>
                       <div style={{ flex: 1 }}>
                         <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                          Bucket 名称
+                          {t('Bucket 名称')}
                         </label>
                         <input
                           type="text"
@@ -968,11 +1041,11 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                       onChange={(e) => setSyncConfig({ ...syncConfig, autoSync: e.target.checked })}
                       style={{ accentColor: 'var(--accent)' }}
                     />
-                    <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>自动同步</span>
+                    <span style={{ fontSize: '13px', color: 'var(--text-primary)' }}>{t('自动同步')}</span>
                   </label>
                   {syncConfig.autoSync && (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>每</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('每')}</span>
                       <input
                         type="number"
                         min="5"
@@ -986,7 +1059,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                           fontSize: '13px', outline: 'none',
                         }}
                       />
-                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>分钟</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{t('分钟')}</span>
                     </div>
                   )}
                 </div>
@@ -998,12 +1071,12 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   disabled={syncing}
                   style={{ width: '100%', marginBottom: 20 }}
                 >
-                  {syncing ? '保存中...' : '保存同步配置'}
+                  {syncing ? t('保存中...') : t('保存同步配置')}
                 </button>
 
                 {/* Sync actions */}
                 <h4 style={{ fontSize: '14px', marginBottom: 12, color: 'var(--text-primary)' }}>
-                  同步操作
+                  {t('同步操作')}
                 </h4>
                 <button
                   className="btn"
@@ -1012,7 +1085,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   style={{ width: '100%', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}
                 >
                   <RefreshCw size={14} strokeWidth={1.5} className={syncing ? 'spin' : ''} />
-                  {syncing ? '同步中...' : '立即同步'}
+                  {syncing ? t('同步中...') : t('立即同步')}
                 </button>
 
                 {/* Sync status */}
@@ -1021,18 +1094,18 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   background: 'var(--bg-primary)', fontSize: '13px', marginBottom: 12,
                   color: 'var(--text-secondary)',
                 }}>
-                  <span>状态: </span>
+                  <span>{t('状态:')} </span>
                   <span style={{
                     color: syncStatus.status === 'success' ? 'var(--success)'
                       : syncStatus.status === 'error' ? 'var(--error)'
                       : syncStatus.status === 'conflict' ? 'var(--warning)'
                       : 'var(--text-muted)',
                   }}>
-                    {syncStatus.message || '就绪'}
+                    {syncStatus.message ? t(syncStatus.message) : t('就绪')}
                   </span>
                   {syncStatus.lastSync && (
                     <span style={{ marginLeft: 12, color: 'var(--text-muted)', fontSize: '12px' }}>
-                      上次同步: {new Date(syncStatus.lastSync).toLocaleString()}
+                      {t('上次同步: {date}', { date: new Date(syncStatus.lastSync).toLocaleString(locale) })}
                     </span>
                   )}
                 </div>
@@ -1054,10 +1127,10 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                 {conflicts.length > 0 && (
                   <div style={{ marginTop: 16 }}>
                     <h4 style={{ fontSize: '14px', marginBottom: 12, color: 'var(--warning)' }}>
-                      ⚠️ 冲突文件 ({conflicts.length})
+                      {t('冲突文件 ({count})', { count: conflicts.length })}
                     </h4>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
-                      加密文件无法自动合并，请为每个文件选择要保留的完整版本。未选择的一侧将被覆盖。
+                      {t('加密文件无法自动合并，请为每个文件选择要保留的完整版本。未选择的一侧将被覆盖。')}
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                       {conflicts.map((conflict, index) => (
@@ -1081,7 +1154,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                               }}
                               style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}
                             >
-                              <CheckCircle size={12} strokeWidth={1.5} /> 保留本地
+                              <CheckCircle size={12} strokeWidth={1.5} /> {t('保留本地')}
                             </button>
                             <button
                               className={`btn btn-sm ${conflict.resolution === 'remote' ? 'btn-primary' : ''}`}
@@ -1092,7 +1165,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                               }}
                               style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'center' }}
                             >
-                              <XCircle size={12} strokeWidth={1.5} /> 使用远程
+                              <XCircle size={12} strokeWidth={1.5} /> {t('使用远程')}
                             </button>
                           </div>
                         </div>
@@ -1104,7 +1177,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                       disabled={syncing || conflicts.some(c => !c.resolution)}
                       style={{ width: '100%' }}
                     >
-                      {syncing ? '处理中...' : '解决冲突并继续同步'}
+                      {syncing ? t('处理中...') : t('解决冲突并继续同步')}
                     </button>
                   </div>
                 )}

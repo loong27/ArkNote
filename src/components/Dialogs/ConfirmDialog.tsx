@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react'
 import ReactDOM from 'react-dom'
 import { AlertTriangle } from 'lucide-react'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface Props {
   open: boolean
@@ -21,12 +22,13 @@ export const ConfirmDialog: React.FC<Props> = ({
   open,
   title,
   message,
-  confirmText = '确认',
-  cancelText = '取消',
+  confirmText,
+  cancelText,
   danger = false,
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useI18n()
   const cancelRef = useRef<HTMLButtonElement>(null)
 
   // Auto-focus cancel button (default action is cancel)
@@ -70,13 +72,13 @@ export const ConfirmDialog: React.FC<Props> = ({
             className="btn"
             onClick={onCancel}
           >
-            {cancelText}
+            {cancelText ?? t('取消')}
           </button>
           <button
             className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`}
             onClick={onConfirm}
           >
-            {confirmText}
+            {confirmText ?? t('确认')}
           </button>
         </div>
       </div>

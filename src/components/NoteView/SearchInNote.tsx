@@ -2,12 +2,14 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { X, ChevronUp, ChevronDown, Search } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import type { SearchMatch } from '../../types'
+import { useI18n } from '../../i18n/I18nProvider'
 
 interface Props {
   onHighlight: (matches: SearchMatch[], currentIndex: number) => void
 }
 
 export const SearchInNote: React.FC<Props> = ({ onHighlight }) => {
+  const { t } = useI18n()
   const {
     currentNote,
     noteSearchQuery,
@@ -103,7 +105,7 @@ export const SearchInNote: React.FC<Props> = ({ onHighlight }) => {
         type="text"
         value={noteSearchQuery}
         onChange={(e) => setNoteSearchQuery(e.target.value)}
-        placeholder="在笔记中搜索..."
+        placeholder={t('在笔记中搜索...')}
         className="note-search-input"
       />
       <span className="note-search-count">
@@ -113,13 +115,13 @@ export const SearchInNote: React.FC<Props> = ({ onHighlight }) => {
         }
       </span>
       <div className="note-search-actions">
-        <button className="note-search-btn" onClick={handlePrev} disabled={matches.length === 0} title="上一个 (Shift+Enter)">
+        <button className="note-search-btn" onClick={handlePrev} disabled={matches.length === 0} title={t('上一个 (Shift+Enter)')}>
           <ChevronUp size={16} strokeWidth={1.5} />
         </button>
-        <button className="note-search-btn" onClick={handleNext} disabled={matches.length === 0} title="下一个 (Enter)">
+        <button className="note-search-btn" onClick={handleNext} disabled={matches.length === 0} title={t('下一个 (Enter)')}>
           <ChevronDown size={16} strokeWidth={1.5} />
         </button>
-        <button className="note-search-btn" onClick={handleClose} title="关闭 (Esc)">
+        <button className="note-search-btn" onClick={handleClose} title={t('关闭 (Esc)')}>
           <X size={16} strokeWidth={1.5} />
         </button>
       </div>

@@ -3,6 +3,8 @@ import path from 'path'
 import { AppConfig } from './services/appConfig'
 import { registerIpcHandlers } from './ipc/handlers'
 import type { IpcHandlerController } from './ipc/handlers'
+import { UpdateService } from './services/updateService'
+import { translate } from '../shared/i18n'
 
 const APP_ID = 'com.arknote.app'
 const LINUX_WM_CLASS = 'ark-note'
@@ -21,6 +23,7 @@ const appConfig = new AppConfig()
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let ipcController: IpcHandlerController | null = null
+let updateService: UpdateService | null = null
 let isQuitting = false
 let pendingQuitResolver: ((ok: boolean) => void) | null = null
 
@@ -231,7 +234,7 @@ function createTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: '显示窗口',
+      label: translate(appConfig.getLanguage(), '显示窗口'),
       click: () => {
         if (mainWindow) {
           mainWindow.show()
@@ -241,7 +244,7 @@ function createTray() {
     },
     { type: 'separator' },
     {
-      label: '退出',
+      label: translate(appConfig.getLanguage(), '退出'),
       click: () => {
         void requestQuitFromRenderer()
       },
@@ -323,6 +326,12 @@ function registerWindowIpc() {
       await shell.openExternal(url)
     }
   })
+
+  ipcMain.on('config:language-changed', () => {
+    tray?.destroy()
+    tray = null
+    createTray()
+  })
 }
 
 app.whenReady().then(() => {
@@ -335,6 +344,13 @@ app.whenReady().then(() => {
   // Register window control IPC handlers
   registerWindowIpc()
 
+  updateService = new UpdateService(async () => {
+    if (!(await requestRendererFlush('restart'))) return false
+    isQuitting = true
+    return true
+  })
+  updateService.registerIpcHandlers()
+
   // Register custom protocol
   registerImageProtocol()
 
@@ -343,6 +359,8 @@ app.whenReady().then(() => {
 
   // Create window
   createWindow()
+
+  updateService.start()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -363,5 +381,6 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   isQuitting = true
+  updateService?.cleanup()
   ipcController?.cleanup()
 })

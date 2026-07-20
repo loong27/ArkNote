@@ -2,8 +2,10 @@ import React, { useMemo } from 'react'
 import { FileText, LayoutGrid, LayoutList } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { format } from 'date-fns'
+import { useI18n } from '../../i18n/I18nProvider'
 
 export const TagNoteView: React.FC = () => {
+  const { t } = useI18n()
   const {
     selectedTagId,
     tags,
@@ -29,7 +31,7 @@ export const TagNoteView: React.FC = () => {
   if (!selectedTagId || !selectedTag) {
     return (
       <div className="empty-state">
-        <p>未选择标签</p>
+        <p>{t('未选择标签')}</p>
       </div>
     )
   }
@@ -45,7 +47,7 @@ export const TagNoteView: React.FC = () => {
           })
           if (!ok) return
         }}>
-          首页
+          {t('首页')}
         </span>
         <span className="separator">/</span>
         <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>
@@ -72,7 +74,7 @@ export const TagNoteView: React.FC = () => {
         <button
           className="icon-btn"
           onClick={() => setDirectoryViewMode(directoryViewMode === 'card' ? 'list' : 'card')}
-          data-tooltip={directoryViewMode === 'card' ? '列表视图' : '卡片视图'}
+          data-tooltip={directoryViewMode === 'card' ? t('列表视图') : t('卡片视图')}
         >
           {directoryViewMode === 'card'
             ? <LayoutList size={18} strokeWidth={1.5} />
@@ -118,7 +120,7 @@ export const TagNoteView: React.FC = () => {
       ) : (
         <div className="empty-state">
           <FileText size={32} strokeWidth={1.5} />
-          <p>该标签下暂无笔记</p>
+          <p>{t('该标签下暂无笔记')}</p>
         </div>
       )}
     </div>

@@ -6,6 +6,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { useStore } from '../../store/useStore'
+import { useI18n } from '../../i18n/I18nProvider'
 
 const darkTheme = EditorView.theme({
   '&': { backgroundColor: '#252932', color: '#f4f7fb' },
@@ -56,6 +57,7 @@ interface Props {
 }
 
 export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady }) => {
+  const { t, language } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   const currentNote = useStore(s => s.currentNote)
@@ -138,7 +140,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
             run: (view) => {
               const { from, to } = view.state.selection.main
               const selected = view.state.sliceDoc(from, to)
-              const text = selected || '粗体文本'
+              const text = selected || t('粗体文本')
               view.dispatch({
                 changes: { from, to, insert: `**${text}**` },
                 selection: { anchor: from + 2, head: from + 2 + text.length },
@@ -152,7 +154,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
             run: (view) => {
               const { from, to } = view.state.selection.main
               const selected = view.state.sliceDoc(from, to)
-              const text = selected || '斜体文本'
+              const text = selected || t('斜体文本')
               view.dispatch({
                 changes: { from, to, insert: `*${text}*` },
                 selection: { anchor: from + 1, head: from + 1 + text.length },
@@ -206,7 +208,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
       view.destroy()
       viewRef.current = null
     }
-  }, [theme, currentNote?.id]) // Recreate editor when switching notes or theme changes
+  }, [theme, currentNote?.id, language]) // Recreate editor when switching notes, theme, or language
 
   // Update content when it changes externally
   useEffect(() => {

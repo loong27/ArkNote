@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { Minus, X, Copy, Square, LockKeyhole } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { DefaultAvatar } from './common/DefaultAvatar'
+import { useI18n } from '../i18n/I18nProvider'
 
 /**
  * Apple HIG-inspired custom title bar.
@@ -11,6 +12,7 @@ import { DefaultAvatar } from './common/DefaultAvatar'
  * - Close dialog: minimize to tray or quit (with remember option)
  */
 export const TitleBar: React.FC = () => {
+  const { t } = useI18n()
   const [isMaximized, setIsMaximized] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [rememberChoice, setRememberChoice] = useState(false)
@@ -104,7 +106,7 @@ export const TitleBar: React.FC = () => {
               className="title-bar-btn"
               onClick={handleLock}
               disabled={locking}
-              title="锁定笔记库"
+              title={t('锁定笔记库')}
             >
               <LockKeyhole size={13} strokeWidth={1.5} />
             </button>
@@ -112,14 +114,14 @@ export const TitleBar: React.FC = () => {
           <button
             className="title-bar-btn title-bar-btn-minimize"
             onClick={handleMinimize}
-            title="最小化"
+            title={t('最小化')}
           >
             <Minus size={14} strokeWidth={1.5} />
           </button>
           <button
             className="title-bar-btn title-bar-btn-maximize"
             onClick={handleMaximize}
-            title={isMaximized ? '还原' : '最大化'}
+            title={isMaximized ? t('还原') : t('最大化')}
           >
             {isMaximized
               ? <Copy size={11} strokeWidth={1.5} />
@@ -129,7 +131,7 @@ export const TitleBar: React.FC = () => {
           <button
             className="title-bar-btn title-bar-btn-close"
             onClick={handleCloseClick}
-            title="关闭"
+            title={t('关闭')}
           >
             <X size={15} strokeWidth={1.5} />
           </button>
@@ -144,26 +146,26 @@ export const TitleBar: React.FC = () => {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="close-dialog-header">
-              <h3>关闭窗口</h3>
+              <h3>{t('关闭窗口')}</h3>
             </div>
             <div className="close-dialog-body">
-              <p>请选择关闭窗口后的操作：</p>
+              <p>{t('请选择关闭窗口后的操作：')}</p>
               <div className="close-dialog-actions">
                 <button
                   className="close-dialog-btn close-dialog-btn-minimize"
                   onClick={() => handleCloseDialogAction('minimize')}
                 >
                   <Minus size={18} strokeWidth={1.5} />
-                  <span className="close-dialog-btn-label">最小化到托盘</span>
-                  <span className="close-dialog-btn-desc">窗口隐藏，后台继续运行</span>
+                  <span className="close-dialog-btn-label">{t('最小化到托盘')}</span>
+                  <span className="close-dialog-btn-desc">{t('窗口隐藏，后台继续运行')}</span>
                 </button>
                 <button
                   className="close-dialog-btn close-dialog-btn-quit"
                   onClick={() => handleCloseDialogAction('quit')}
                 >
                   <X size={18} strokeWidth={1.5} />
-                  <span className="close-dialog-btn-label">退出应用</span>
-                  <span className="close-dialog-btn-desc">完全关闭应用程序</span>
+                  <span className="close-dialog-btn-label">{t('退出应用')}</span>
+                  <span className="close-dialog-btn-desc">{t('完全关闭应用程序')}</span>
                 </button>
               </div>
               <label className="close-dialog-remember">
@@ -172,11 +174,11 @@ export const TitleBar: React.FC = () => {
                   checked={rememberChoice}
                   onChange={(e) => setRememberChoice(e.target.checked)}
                 />
-                <span>记住我的选择（可在设置中重置）</span>
+                <span>{t('记住我的选择（可在设置中重置）')}</span>
               </label>
             </div>
             <div className="close-dialog-footer">
-              <button className="btn" onClick={handleCancelClose}>取消</button>
+              <button className="btn" onClick={handleCancelClose}>{t('取消')}</button>
             </div>
           </div>
         </div>
