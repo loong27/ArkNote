@@ -1,0 +1,17 @@
+{
+  "name": "arkNote",
+  "short_name": "arkNote",
+  "description": "本地优先、端到端加密并支持 Git 同步的跨平台笔记应用。",
+  "lang": "zh-CN",
+  "start_url": "./",
+  "display": "browser",
+  "background_color": "#f5f7fa",
+  "theme_color": "#f5f7fa",
+  "icons": [
+    {
+      "src": "./assets/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

@@ -6,3 +6,4 @@ icon.png -filter -diff -merge -text
 public/icon.png -filter -diff -merge -text
 public/default-avatar.png -filter -diff -merge -text
 build/icons/*.png -filter -diff -merge -text
+website/assets/*.png -filter -diff -merge -text

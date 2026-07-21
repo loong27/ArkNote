@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>arkNote - 本地优先、端到端加密的跨平台笔记应用</title>
+    <meta name="description" content="arkNote 是一款本地优先、端到端加密并支持 Git 同步的跨平台笔记应用。支持 Markdown、全文搜索、版本历史与 GitHub 加密备份，免费下载 Windows 和 Linux 最新版。" />
+    <meta name="keywords" content="arkNote,加密笔记,本地笔记,Markdown笔记,跨平台笔记,Git同步,知识管理,Windows笔记软件,Linux笔记软件" />
+    <meta name="author" content="arkNote" />
+    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="theme-color" content="#f5f7fa" />
+    <meta name="color-scheme" content="light" />
+
+    <link rel="canonical" href="https://loong27.github.io/ArkNote/" />
+    <link rel="icon" type="image/svg+xml" href="./assets/ark-note-icon.svg" />
+    <link rel="apple-touch-icon" href="./assets/icon.png" />
+    <link rel="manifest" href="./site.webmanifest" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="arkNote" />
+    <meta property="og:title" content="arkNote - 让个人知识长久留存" />
+    <meta property="og:description" content="本地优先、端到端加密、支持 Git 同步的跨平台笔记应用。" />
+    <meta property="og:url" content="https://loong27.github.io/ArkNote/" />
+    <meta property="og:image" content="https://loong27.github.io/ArkNote/assets/og-cover.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="arkNote 加密笔记应用界面" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="arkNote - 让个人知识长久留存" />
+    <meta name="twitter:description" content="本地优先、端到端加密、支持 Git 同步的跨平台笔记应用。" />
+    <meta name="twitter:image" content="https://loong27.github.io/ArkNote/assets/og-cover.png" />
+
+    <link rel="stylesheet" href="./styles.css" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "arkNote",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "Windows, Linux",
+        "description": "本地优先、端到端加密并支持 Git 同步的跨平台笔记应用。",
+        "url": "https://loong27.github.io/ArkNote/",
+        "downloadUrl": "https://github.com/loong27/ArkNote/releases/latest",
+        "softwareVersion": "latest",
+        "image": "https://loong27.github.io/ArkNote/assets/og-cover.png",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "CNY"
+        },
+        "publisher": {
+          "@type": "Organization",
+          "name": "arkNote",
+          "url": "https://github.com/loong27/ArkNote"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-download" viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <path d="m7 10 5 5 5-5" />
+        <path d="M12 15V3" />
+      </symbol>
+      <symbol id="icon-arrow-right" viewBox="0 0 24 24">
+        <path d="M5 12h14" />
+        <path d="m12 5 7 7-7 7" />
+      </symbol>
+      <symbol id="icon-github" viewBox="0 0 24 24">
+        <path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3.3-.4 6.8-1.6 6.8-7A5.4 5.4 0 0 0 19.4 4 5 5 0 0 0 19.3.5S18.2.1 15 1.8a13.4 13.4 0 0 0-7 0C4.8.1 3.7.5 3.7.5A5 5 0 0 0 3.6 4a5.4 5.4 0 0 0-1.4 3.7c0 5.4 3.5 6.6 6.8 7A4.8 4.8 0 0 0 8 18v4" />
+        <path d="M8 19c-3 .9-3-1.5-4-2" />
+      </symbol>
+      <symbol id="icon-shield" viewBox="0 0 24 24">
+        <path d="M20 13c0 5-3.5 7.5-7.7 8.9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z" />
+        <path d="m9 12 2 2 4-4" />
+      </symbol>
+      <symbol id="icon-wifi-off" viewBox="0 0 24 24">
+        <path d="M12.5 21H12a1 1 0 0 1-1-1 1 1 0 0 1 1-1" />
+        <path d="M8.5 16.4a5 5 0 0 1 7 0" />
+        <path d="M5 12.9a10 10 0 0 1 5.2-2.8" />
+        <path d="M19 12.9a10 10 0 0 0-2.5-1.7" />
+        <path d="M2 8.5a15 15 0 0 1 5.6-3.2" />
+        <path d="M22 8.5a15 15 0 0 0-10.1-3.8" />
+        <path d="m2 2 20 20" />
+      </symbol>
+      <symbol id="icon-git" viewBox="0 0 24 24">
+        <circle cx="12" cy="18" r="3" />
+        <circle cx="6" cy="6" r="3" />
+        <circle cx="18" cy="6" r="3" />
+        <path d="M18 9v1a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9" />
+        <path d="M12 12v3" />
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8" />
+        <path d="m21 21-4.3-4.3" />
+      </symbol>
+      <symbol id="icon-history" viewBox="0 0 24 24">
+        <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+        <path d="M3 3v5h5" />
+        <path d="M12 7v5l4 2" />
+      </symbol>
+      <symbol id="icon-file" viewBox="0 0 24 24">
+        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5z" />
+        <path d="M14 2v6h6" />
+        <path d="M8 13h8" />
+        <path d="M8 17h5" />
+      </symbol>
+      <symbol id="icon-external" viewBox="0 0 24 24">
+        <path d="M15 3h6v6" />
+        <path d="M10 14 21 3" />
+        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+      </symbol>
+    </svg>
+
+    <header class="site-header">
+      <div class="header-inner">
+        <a class="brand" href="#top" aria-label="arkNote 首页">
+          <img src="./assets/ark-note-icon.svg" width="34" height="34" alt="" />
+          <span>arkNote</span>
+        </a>
+        <nav class="desktop-nav" aria-label="主导航">
+          <a href="#philosophy">产品理念</a>
+          <a href="#features">核心能力</a>
+          <a href="#download">下载</a>
+        </nav>
+        <a class="github-link" href="https://github.com/loong27/ArkNote" target="_blank" rel="noreferrer" aria-label="在 GitHub 查看 arkNote">
+          <svg class="icon"><use href="#icon-github"></use></svg>
+          <span>GitHub</span>
+        </a>
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="hero-title">
+        <div class="hero-scene" aria-hidden="true">
+          <div class="app-window">
+            <div class="app-titlebar">
+              <span class="window-mark"></span>
+              <span class="app-title">arkNote</span>
+              <span class="window-actions">—　□　×</span>
+            </div>
+            <div class="app-body">
+              <aside class="app-sidebar">
+                <div class="sidebar-brand"><img src="./assets/ark-note-icon.svg" alt="" /> <span>我的方舟</span></div>
+                <div class="mock-search">搜索笔记</div>
+                <div class="mock-nav active"><span>▦</span> 全部笔记 <b>28</b></div>
+                <div class="mock-nav"><span>⌕</span> 工作 <b>9</b></div>
+                <div class="mock-nav"><span>◇</span> 灵感 <b>12</b></div>
+                <div class="mock-nav"><span>□</span> 归档 <b>7</b></div>
+                <div class="sidebar-caption">最近更新</div>
+                <div class="note-row selected"><strong>数字方舟设计笔记</strong><small>刚刚 · 8 个标签</small></div>
+                <div class="note-row"><strong>知识库迁移计划</strong><small>昨天 · 已同步</small></div>
+                <div class="note-row"><strong>阅读与摘录</strong><small>周一 · 14:32</small></div>
+              </aside>
+              <div class="app-editor">
+                <div class="editor-tabs"><span class="tab-active">数字方舟设计笔记</span><span>知识库迁移计划</span></div>
+                <div class="editor-toolbar">H1　H2　 <b>B</b>　<i>I</i>　↗　☑　⌘</div>
+                <div class="editor-content">
+                  <div class="editor-copy">
+                    <span class="syntax">#</span> 数字方舟设计笔记<br /><br />
+                    <span class="syntax">##</span> 为什么选择本地优先<br /><br />
+                    <span class="muted-code">知识不应被某个平台的生命周期限制。</span><br /><br />
+                    <span class="syntax">-</span> 本地完整可用<br />
+                    <span class="syntax">-</span> AES-256-GCM 加密<br />
+                    <span class="syntax">-</span> Git 版本与同步<br /><br />
+                    <span class="code-line">```mermaid</span><br />
+                    <span class="code-line">graph LR</span><br />
+                    <span class="code-line">本地 -- 密文 --&gt; GitHub</span>
+                  </div>
+                  <div class="preview-copy">
+                    <small>预览</small>
+                    <h3>数字方舟设计笔记</h3>
+                    <h4>为什么选择本地优先</h4>
+                    <p>知识不应被某个平台的生命周期限制。</p>
+                    <ul><li>本地完整可用</li><li>AES-256-GCM 加密</li><li>Git 版本与同步</li></ul>
+                    <div class="flow-row"><span>本地</span><i>密文</i><span>GitHub</span></div>
+                  </div>
+                </div>
+                <div class="editor-status"><span>Markdown</span><span class="sync-ok">● 已加密并同步</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="content hero-content">
+          <p class="eyebrow"><span></span> 为长期保存个人知识而造</p>
+          <h1 id="hero-title">arkNote</h1>
+          <p class="hero-lead">你的数字方舟。</p>
+          <p class="hero-description">本地优先、端到端加密、支持 Git 同步。无论设备和平台如何变化，让重要知识始终由你掌握。</p>
+          <div class="hero-actions">
+            <a id="primary-download" class="button button-primary" href="https://github.com/loong27/ArkNote/releases/latest">
+              <svg class="icon"><use href="#icon-download"></use></svg>
+              <span>获取最新版</span>
+            </a>
+            <a class="button button-secondary" href="#philosophy">
+              了解 arkNote
+              <svg class="icon"><use href="#icon-arrow-right"></use></svg>
+            </a>
+          </div>
+          <p class="release-line" id="hero-release" aria-live="polite">正在获取最新版本…</p>
+        </div>
+
+        <a class="next-section-hint" href="#philosophy" aria-label="继续了解 arkNote">
+          <span>本地所有权</span><span>加密封存</span><span>可验证恢复</span>
+        </a>
+      </section>
+
+      <section id="philosophy" class="philosophy section-band">
+        <div class="content philosophy-grid">
+          <div>
+            <p class="section-kicker">数字方舟</p>
+            <h2>不是另一个云盘，<br />而是一套知识生存策略。</h2>
+          </div>
+          <div class="philosophy-copy">
+            <p>设备会损坏，平台会停止服务，账号和网络环境也会改变。arkNote 让笔记首先存在你的设备上，把远端当作加密后的迁移与恢复通道。</p>
+            <p>你可以离线写作、独立备份，也可以在新设备上恢复完整的加密仓库。服务可以替换，数据所有权始终不变。</p>
+            <a class="text-link" href="https://github.com/loong27/ArkNote#readme" target="_blank" rel="noreferrer">阅读项目说明 <svg class="icon"><use href="#icon-external"></use></svg></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="trust-strip" aria-label="arkNote 安全与兼容特性">
+        <div class="content trust-grid">
+          <div><strong>AES-256-GCM</strong><span>内容加密</span></div>
+          <div><strong>600,000 次</strong><span>密钥派生迭代</span></div>
+          <div><strong>Windows · Linux</strong><span>跨平台使用</span></div>
+          <div><strong>Markdown</strong><span>开放内容表达</span></div>
+        </div>
+      </section>
+
+      <section id="features" class="features">
+        <div class="content">
+          <div class="section-heading reveal">
+            <p class="section-kicker">核心能力</p>
+            <h2>从写下，到多年后再次打开。</h2>
+            <p>围绕个人知识的创建、整理、保护与迁移，提供一套完整而克制的桌面工具。</p>
+          </div>
+
+          <div class="feature-grid">
+            <article class="feature-item reveal">
+              <span class="feature-icon teal"><svg class="icon"><use href="#icon-wifi-off"></use></svg></span>
+              <h3>离线也完整可用</h3>
+              <p>笔记默认保存在本地。没有网络时，编辑、搜索和整理仍然照常工作。</p>
+            </article>
+            <article class="feature-item reveal">
+              <span class="feature-icon blue"><svg class="icon"><use href="#icon-shield"></use></svg></span>
+              <h3>端到端加密封存</h3>
+              <p>笔记、图片和元数据通过 AES-256-GCM 加密，远端仓库只保存密文。</p>
+            </article>
+            <article class="feature-item reveal">
+              <span class="feature-icon orange"><svg class="icon"><use href="#icon-git"></use></svg></span>
+              <h3>Git 双向同步</h3>
+              <p>使用你自己的 GitHub 数据仓库，在设备之间同步、迁移并恢复加密数据。</p>
+            </article>
+            <article class="feature-item reveal">
+              <span class="feature-icon green"><svg class="icon"><use href="#icon-file"></use></svg></span>
+              <h3>增强 Markdown</h3>
+              <p>支持实时预览、Mermaid 图表、任务列表、脚注、图片粘贴与常用扩展语法。</p>
+            </article>
+            <article class="feature-item reveal">
+              <span class="feature-icon pink"><svg class="icon"><use href="#icon-search"></use></svg></span>
+              <h3>快速找到内容</h3>
+              <p>通过目录、标签和全文搜索组织知识，不让有价值的信息沉入文件夹深处。</p>
+            </article>
+            <article class="feature-item reveal">
+              <span class="feature-icon violet"><svg class="icon"><use href="#icon-history"></use></svg></span>
+              <h3>版本与回收站</h3>
+              <p>保留笔记版本历史和删除缓冲区，为误改、误删与长期维护留下回退空间。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="workflow section-band">
+        <div class="content">
+          <div class="section-heading compact reveal">
+            <p class="section-kicker">可验证的路径</p>
+            <h2>数据如何穿越设备</h2>
+          </div>
+          <ol class="workflow-list reveal">
+            <li><span>01</span><div><strong>在本地创建</strong><p>明文只在解锁后的应用中使用。</p></div></li>
+            <li><span>02</span><div><strong>加密后保存</strong><p>内容、图片与元数据分别加密落盘。</p></div></li>
+            <li><span>03</span><div><strong>以密文同步</strong><p>GitHub 仓库只接收不可读的加密文件。</p></div></li>
+            <li><span>04</span><div><strong>在新设备恢复</strong><p>拉取完整仓库，再用原密码验证并解锁。</p></div></li>
+          </ol>
+        </div>
+      </section>
+
+      <section id="download" class="download-section">
+        <div class="content download-layout">
+          <div class="download-intro reveal">
+            <p class="section-kicker">下载 arkNote</p>
+            <h2>把知识带回自己的设备。</h2>
+            <p>安装包直接来自 GitHub Releases。页面会自动跟随最新正式版本，无需手动更新下载地址。</p>
+            <div class="release-badge">
+              <span class="status-dot"></span>
+              <div><strong id="release-version">获取版本中…</strong><small id="release-date">GitHub 正式发行版</small></div>
+            </div>
+          </div>
+
+          <div class="download-picker reveal">
+            <div class="platform-tabs" role="tablist" aria-label="选择操作系统">
+              <button id="tab-windows" class="platform-tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-windows" data-platform="windows">Windows</button>
+              <button id="tab-linux" class="platform-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-linux" data-platform="linux">Linux</button>
+            </div>
+
+            <div id="panel-windows" class="package-panel" role="tabpanel" aria-labelledby="tab-windows">
+              <a class="package-row" data-package="windows-x64" href="https://github.com/loong27/ArkNote/releases/latest">
+                <span class="package-mark windows">W</span>
+                <span class="package-copy"><strong>Windows 64 位</strong><small>NSIS 安装程序 · 推荐</small></span>
+                <span class="package-meta">EXE</span>
+                <svg class="icon"><use href="#icon-download"></use></svg>
+              </a>
+              <a class="package-row" data-package="windows-x86" href="https://github.com/loong27/ArkNote/releases/latest">
+                <span class="package-mark windows">W</span>
+                <span class="package-copy"><strong>Windows 32 位</strong><small>适用于旧版 x86 系统</small></span>
+                <span class="package-meta">EXE</span>
+                <svg class="icon"><use href="#icon-download"></use></svg>
+              </a>
+            </div>
+
+            <div id="panel-linux" class="package-panel" role="tabpanel" aria-labelledby="tab-linux" hidden>
+              <a class="package-row" data-package="linux-appimage" href="https://github.com/loong27/ArkNote/releases/latest">
+                <span class="package-mark linux">L</span>
+                <span class="package-copy"><strong>Linux AppImage</strong><small>免安装 · x86_64</small></span>
+                <span class="package-meta">AppImage</span>
+                <svg class="icon"><use href="#icon-download"></use></svg>
+              </a>
+              <a class="package-row" data-package="linux-deb" href="https://github.com/loong27/ArkNote/releases/latest">
+                <span class="package-mark linux">L</span>
+                <span class="package-copy"><strong>Debian / Ubuntu</strong><small>适用于 APT 系发行版</small></span>
+                <span class="package-meta">DEB</span>
+                <svg class="icon"><use href="#icon-download"></use></svg>
+              </a>
+              <a class="package-row" data-package="linux-rpm" href="https://github.com/loong27/ArkNote/releases/latest">
+                <span class="package-mark linux">L</span>
+                <span class="package-copy"><strong>Fedora / RHEL</strong><small>适用于 RPM 系发行版</small></span>
+                <span class="package-meta">RPM</span>
+                <svg class="icon"><use href="#icon-download"></use></svg>
+              </a>
+            </div>
+
+            <p id="download-status" class="download-status" aria-live="polite">正在连接 GitHub Releases…</p>
+            <a class="all-releases" href="https://github.com/loong27/ArkNote/releases" target="_blank" rel="noreferrer">查看全部历史版本 <svg class="icon"><use href="#icon-external"></use></svg></a>
+          </div>
+        </div>
+      </section>
+
+      <section class="faq section-band">
+        <div class="content faq-layout">
+          <div class="section-heading compact reveal">
+            <p class="section-kicker">常见问题</p>
+            <h2>下载前，你可能想知道</h2>
+          </div>
+          <div class="faq-list reveal">
+            <details>
+              <summary>arkNote 的笔记会上传到服务器吗？</summary>
+              <p>笔记首先保存在本地。启用 Git 同步后，远端仓库保存的是加密文件，不是可直接阅读的明文笔记。</p>
+            </details>
+            <details>
+              <summary>没有网络还能使用吗？</summary>
+              <p>可以。编辑、预览、搜索和整理均在本地完成；只有主动同步、恢复和检查更新需要网络。</p>
+            </details>
+            <details>
+              <summary>忘记密码后能找回吗？</summary>
+              <p>不能。密码不会上传，也没有绕过加密的恢复通道。请妥善保存密码，并为加密数据保留离线备份。</p>
+            </details>
+            <details>
+              <summary>下载链接会指向哪个版本？</summary>
+              <p>本站实时读取 arkNote 的 GitHub 最新正式发行版，并按操作系统匹配对应安装包；连接失败时会自动回退到 Releases 页面。</p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="content footer-inner">
+        <div class="footer-brand"><img src="./assets/ark-note-icon.svg" width="32" height="32" alt="" /><span><strong>arkNote</strong><small>让个人知识长久留存</small></span></div>
+        <div class="footer-links">
+          <a href="https://github.com/loong27/ArkNote" target="_blank" rel="noreferrer">源代码</a>
+          <a href="https://github.com/loong27/ArkNote/issues" target="_blank" rel="noreferrer">问题反馈</a>
+          <a href="https://github.com/loong27/ArkNote/releases" target="_blank" rel="noreferrer">发行版本</a>
+        </div>
+        <p>© <span id="current-year">2026</span> arkNote</p>
+      </div>
+    </footer>
+
+    <noscript>
+      <div class="noscript-banner">JavaScript 已关闭。你仍可前往 <a href="https://github.com/loong27/ArkNote/releases/latest">GitHub Releases</a> 下载最新版 arkNote。</div>
+    </noscript>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

@@ -10,6 +10,7 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "brand:generate": "node scripts/generate-brand-assets.mjs",
+    "website:assets": "node scripts/generate-website-og.mjs",
     "dev": "vite",
     "verify:icons": "node scripts/verify-icons.mjs",
     "test:brand": "node scripts/test-branding.mjs",
@@ -19,7 +20,8 @@
     "test:i18n": "node scripts/test-i18n.mjs",
     "test:sync": "node scripts/test-sync-service.mjs",
     "test:markdown": "node scripts/test-markdown-renderer.mjs",
-    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:restore && npm run test:updater && npm run test:i18n && npm run test:sync && npm run test:markdown && vite build",
+    "test:website": "node scripts/test-website.mjs",
+    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:restore && npm run test:updater && npm run test:i18n && npm run test:sync && npm run test:markdown && npm run test:website && vite build",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win nsis --x64 --ia32",
     "package:mac": "npm run build && electron-builder --mac",
