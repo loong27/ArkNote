@@ -11,6 +11,7 @@
   "scripts": {
     "brand:generate": "node scripts/generate-brand-assets.mjs",
     "website:assets": "node scripts/generate-website-og.mjs",
+    "website:build": "npm run website:assets && node scripts/build-website.mjs",
     "dev": "vite",
     "verify:icons": "node scripts/verify-icons.mjs",
     "test:brand": "node scripts/test-branding.mjs",

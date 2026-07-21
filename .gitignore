@@ -6,6 +6,7 @@ dist/
 dist-electron/
 release/
 out/
+website-dist/
 
 # Electron Builder
 *.blockmap

@@ -2,8 +2,6 @@
 
 English | [简体中文](./README.md)
 
-[Website & Downloads](https://loong27.github.io/ArkNote/) · [GitHub Releases](https://github.com/loong27/ArkNote/releases/latest)
-
 [![Package Desktop App](https://github.com/loong27/ArkNote/actions/workflows/package.yml/badge.svg)](https://github.com/loong27/ArkNote/actions/workflows/package.yml)
 [![Latest Release](https://img.shields.io/github/v/release/loong27/ArkNote)](https://github.com/loong27/ArkNote/releases/latest)
 
