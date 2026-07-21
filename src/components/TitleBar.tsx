@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Minus, X, Copy, Square, LockKeyhole } from 'lucide-react'
+import { Minus, X, Copy, Square, LockKeyhole, RefreshCw } from 'lucide-react'
 import { useStore } from '../store/useStore'
 import { DefaultAvatar } from './common/DefaultAvatar'
 import { useI18n } from '../i18n/I18nProvider'
@@ -16,10 +16,14 @@ export const TitleBar: React.FC = () => {
   const [isMaximized, setIsMaximized] = useState(false)
   const [showCloseDialog, setShowCloseDialog] = useState(false)
   const [rememberChoice, setRememberChoice] = useState(false)
+  const [syncing, setSyncing] = useState(false)
   const [locking, setLocking] = useState(false)
   const isLocked = useStore((state) => state.isLocked)
   const setLocked = useStore((state) => state.setLocked)
+  const setSyncStatus = useStore((state) => state.setSyncStatus)
   const flushPendingSaves = useStore((state) => state.flushPendingSaves)
+  const loadData = useStore((state) => state.loadData)
+  const refreshCurrentNote = useStore((state) => state.refreshCurrentNote)
 
   // Listen for maximize/unmaximize events from main process
   useEffect(() => {
@@ -51,7 +55,7 @@ export const TitleBar: React.FC = () => {
   }, [flushPendingSaves])
 
   const handleLock = useCallback(async () => {
-    if (locking || isLocked) return
+    if (locking || syncing || isLocked) return
     setLocking(true)
     try {
       if (!(await flushPendingSaves())) return
@@ -60,7 +64,34 @@ export const TitleBar: React.FC = () => {
     } finally {
       setLocking(false)
     }
-  }, [flushPendingSaves, isLocked, locking, setLocked])
+  }, [flushPendingSaves, isLocked, locking, setLocked, syncing])
+
+  const handleSync = useCallback(async () => {
+    if (syncing || locking || isLocked) return
+    setSyncing(true)
+    try {
+      if (!(await flushPendingSaves())) return
+
+      const result = await window.electronAPI.sync.sync()
+      setSyncStatus(result)
+
+      if (result.status === 'success') {
+        await loadData()
+        await refreshCurrentNote()
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('Failed to sync:', error)
+      const previousStatus = useStore.getState().syncStatus
+      setSyncStatus({
+        ...previousStatus,
+        status: 'error',
+        message: `同步失败: ${message}`,
+      })
+    } finally {
+      setSyncing(false)
+    }
+  }, [flushPendingSaves, isLocked, loadData, locking, refreshCurrentNote, setSyncStatus, syncing])
 
   const handleMaximize = useCallback(() => {
     window.electronAPI.window.maximize()
@@ -102,14 +133,24 @@ export const TitleBar: React.FC = () => {
         {/* Right: Window controls — kept on the right per user request */}
         <div className="title-bar-controls">
           {!isLocked && (
-            <button
-              className="title-bar-btn"
-              onClick={handleLock}
-              disabled={locking}
-              title={t('锁定笔记库')}
-            >
-              <LockKeyhole size={13} strokeWidth={1.5} />
-            </button>
+            <>
+              <button
+                className="title-bar-btn"
+                onClick={handleSync}
+                disabled={syncing || locking}
+                title={syncing ? t('同步中...') : t('立即同步')}
+              >
+                <RefreshCw size={13} strokeWidth={1.5} className={syncing ? 'spin' : ''} />
+              </button>
+              <button
+                className="title-bar-btn"
+                onClick={handleLock}
+                disabled={locking || syncing}
+                title={t('锁定笔记库')}
+              >
+                <LockKeyhole size={13} strokeWidth={1.5} />
+              </button>
+            </>
           )}
           <button
             className="title-bar-btn title-bar-btn-minimize"

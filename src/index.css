@@ -283,7 +283,7 @@ html, body, #root {
 }
 
 .app-root:has(.app-layout) .note-tabs {
-  padding-right: 196px;
+  padding-right: 242px;
 }
 
 .app-root:has(.app-layout) .preview-toolbar,
