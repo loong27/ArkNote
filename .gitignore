@@ -43,8 +43,12 @@ pnpm-debug.log*
 .vite/
 .eslintcache
 
-# Test coverage
+# Test artifacts
 coverage/
+.nyc_output/
+test-results/
+playwright-report/
+/release-*-test-*/
 
 # OS and editor files
 .DS_Store
