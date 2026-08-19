@@ -1385,6 +1385,9 @@ html, body, #root {
 
 .sidebar-create-menu {
   position: relative;
+  width: 100%;
+  max-width: 320px;
+  margin-inline: auto;
 }
 
 .sidebar-create-btn {
@@ -1507,6 +1510,12 @@ html, body, #root {
 
 .search-bar .search-wrapper {
   position: relative;
+}
+
+.sidebar-panel > .search-bar .search-wrapper {
+  width: 100%;
+  max-width: 320px;
+  margin-inline: auto;
 }
 
 .search-bar .search-icon {

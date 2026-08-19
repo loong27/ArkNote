@@ -113,6 +113,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
     const state = EditorState.create({
       doc: content,
       extensions: [
+        EditorView.lineWrapping,
         lineNumbers(),
         highlightActiveLine(),
         highlightActiveLineGutter(),
