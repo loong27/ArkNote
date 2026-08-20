@@ -70,7 +70,8 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --title "$TAG_NAME" \
-              --notes "Automated desktop packages."
+              --notes "Automated desktop packages." \
+              --draft
           fi
 
   linux:
@@ -167,3 +168,20 @@ jobs:
           }
 
           gh release upload $env:TAG_NAME @files --repo $env:GH_REPO --clobber
+
+  publish:
+    name: Publish GitHub Release
+    runs-on: ubuntu-22.04
+    needs:
+      - prepare-release
+      - linux
+      - windows
+    permissions:
+      contents: write
+
+    steps:
+      - name: Mark GitHub Release as published
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
+        run: gh release edit "$TAG_NAME" --repo "$GH_REPO" --draft=false
