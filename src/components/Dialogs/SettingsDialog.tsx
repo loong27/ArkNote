@@ -99,6 +99,11 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
         if (sStatus.conflicts && sStatus.conflicts.length > 0) {
           setConflicts(sStatus.conflicts)
         }
+
+        // Trigger a fresh check when opening settings if never checked or last check failed
+        if (!appUpdate.checkedAt || appUpdate.phase === 'error' || appUpdate.phase === 'idle') {
+          setUpdateState(await window.electronAPI.updates.check())
+        }
       } catch (error) {
         console.error('Failed to load config:', error)
       }
@@ -1189,3 +1194,4 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     </div>
   )
 }
+

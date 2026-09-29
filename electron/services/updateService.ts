@@ -3,7 +3,8 @@ import { autoUpdater, type ProgressInfo, type UpdateInfo } from 'electron-update
 import type { AppUpdateState } from '../../src/types'
 
 const INITIAL_CHECK_DELAY_MS = 12_000
-const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
+const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
+const SHOW_WINDOW_RECHECK_MIN_MS = 30 * 60 * 1000
 
 export class UpdateService {
   private state: AppUpdateState = {
@@ -16,6 +17,8 @@ export class UpdateService {
   }
   private initialCheckTimer: NodeJS.Timeout | null = null
   private checkInterval: NodeJS.Timeout | null = null
+  private lastShownCheck: number = 0
+  private stateListeners: Array<() => void> = []
   private started = false
 
   constructor(private readonly beforeInstall: () => Promise<boolean>) {
@@ -55,10 +58,28 @@ export class UpdateService {
     if (this.checkInterval) clearInterval(this.checkInterval)
     this.initialCheckTimer = null
     this.checkInterval = null
+    this.stateListeners = []
+  }
+
+  onStateChange(listener: () => void): void {
+    this.stateListeners.push(listener)
   }
 
   getState(): AppUpdateState {
     return { ...this.state }
+  }
+
+  /**
+   * Recheck for updates when the main window is shown (throttled).
+   * Called by main.ts when the window becomes visible again (e.g. from tray).
+   */
+  onWindowShown(): void {
+    if (!this.started) return
+    if (this.state.phase === 'available' || this.state.phase === 'downloaded') return
+    const now = Date.now()
+    if (now - this.lastShownCheck < SHOW_WINDOW_RECHECK_MIN_MS) return
+    this.lastShownCheck = now
+    void this.checkForUpdates()
   }
 
   async checkForUpdates(): Promise<AppUpdateState> {
@@ -163,9 +184,17 @@ export class UpdateService {
 
   private setState(patch: Partial<AppUpdateState>): void {
     this.state = { ...this.state, ...patch }
+    console.log('[updater] state:', this.state.phase, this.state.message)
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) {
         window.webContents.send('updates:state-changed', this.getState())
+      }
+    }
+    for (const listener of this.stateListeners) {
+      try {
+        listener()
+      } catch (error) {
+        console.error('[updater] state listener error:', error)
       }
     }
   }

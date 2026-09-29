@@ -837,6 +837,15 @@ html, body, #root {
   background: var(--bg-surface-hover);
 }
 
+.update-notice.error {
+  border-color: var(--danger, #e5484d);
+}
+
+.update-notice.error .update-notice-icon {
+  color: var(--danger, #e5484d);
+  background: color-mix(in srgb, var(--danger, #e5484d) 14%, transparent);
+}
+
 .update-progress {
   width: 100%;
   height: 3px;
@@ -5068,4 +5077,5 @@ html[data-theme="light"] .app {
 [data-theme="light"] .directory-list-item .list-item-meta {
   color: var(--color-text-muted);
 }
+
 

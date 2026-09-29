@@ -128,6 +128,11 @@ function createWindow() {
     mainWindow?.show()
   })
 
+  // Recheck for updates when the window is shown again (e.g. from tray)
+  mainWindow.on('show', () => {
+    updateService?.onWindowShown()
+  })
+
   // Load the app
   if (process.env.VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
@@ -225,39 +230,78 @@ async function requestRestartFromRenderer() {
   app.exit(0)
 }
 
+function showMainWindow(): void {
+  if (mainWindow) {
+    mainWindow.show()
+    mainWindow.focus()
+  }
+}
+
+function rebuildTrayMenu(): void {
+  if (!tray) return
+  const language = appConfig.getLanguage()
+  const update = updateService?.getState()
+  const template: Electron.MenuItemConstructorOptions[] = [
+    { label: translate(language, '显示窗口'), click: showMainWindow },
+  ]
+
+  const phase = update?.phase
+  if (phase && phase !== 'disabled' && phase !== 'idle') {
+    template.push({ type: 'separator' })
+    if (phase === 'available' && update.availableVersion) {
+      template.push({
+        label: translate(language, '下载更新 {version}', { version: update.availableVersion }),
+        click: () => {
+          void updateService?.downloadUpdate()
+        },
+      })
+    } else if (phase === 'downloaded' && update.availableVersion) {
+      template.push({
+        label: translate(language, '更新已就绪，重启安装'),
+        click: () => {
+          void updateService?.installUpdate()
+        },
+      })
+    } else if (phase === 'downloading') {
+      template.push({
+        label: translate(language, '正在下载更新 {progress}%', { progress: Math.round(update.progress ?? 0) }),
+        enabled: false,
+      })
+    } else if (phase === 'checking') {
+      template.push({ label: translate(language, '检查更新中...'), enabled: false })
+    } else if (phase === 'error') {
+      template.push({ label: translate(language, update.message), enabled: false })
+    }
+  }
+
+  template.push({ type: 'separator' })
+  template.push({
+    label: translate(language, '检查更新'),
+    enabled: !!update && !['checking', 'downloading'].includes(phase as string),
+    click: () => {
+      void updateService?.checkForUpdates()
+    },
+  })
+  template.push({ type: 'separator' })
+  template.push({
+    label: translate(language, '退出'),
+    click: () => {
+      void requestQuitFromRenderer()
+    },
+  })
+
+  tray.setContextMenu(Menu.buildFromTemplate(template))
+}
+
 function createTray() {
   const iconSize = process.platform === 'linux' ? 24 : 16
   const trayIcon = loadIcon(iconSize)
 
   tray = new Tray(trayIcon)
   tray.setToolTip('arkNote')
+  rebuildTrayMenu()
 
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: translate(appConfig.getLanguage(), '显示窗口'),
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show()
-          mainWindow.focus()
-        }
-      },
-    },
-    { type: 'separator' },
-    {
-      label: translate(appConfig.getLanguage(), '退出'),
-      click: () => {
-        void requestQuitFromRenderer()
-      },
-    },
-  ])
-  tray.setContextMenu(contextMenu)
-
-  tray.on('double-click', () => {
-    if (mainWindow) {
-      mainWindow.show()
-      mainWindow.focus()
-    }
-  })
+  tray.on('double-click', showMainWindow)
 }
 
 // Register custom protocol for serving encrypted images
@@ -356,6 +400,9 @@ app.whenReady().then(() => {
 
   // Create system tray
   createTray()
+
+  // Refresh tray menu whenever update state changes
+  updateService.onStateChange(() => rebuildTrayMenu())
 
   // Create window
   createWindow()
