@@ -44,6 +44,50 @@ export class DirectoryService {
     })
   }
 
+  /**
+   * Move a directory (and all its contents) to a new parent directory.
+   * Validates: target exists, max 3-level nesting, and target is not the directory itself or one of its descendants.
+   */
+  move(id: string, targetParentId: string | null): boolean {
+    const meta = this.fileManager.getMetadata()
+    const dir = meta.directories.find(d => d.id === id)
+    if (!dir) return false
+    if (dir.parentId === targetParentId) return true
+
+    if (targetParentId !== null) {
+      const target = meta.directories.find(d => d.id === targetParentId)
+      if (!target) throw new Error('目标目录不存在')
+
+      // Prevent moving into itself or its own descendants
+      const descendants = this.getDescendantIds(id)
+      if (targetParentId === id || descendants.includes(targetParentId)) {
+        throw new Error('不能将目录移动到自身或其子目录中')
+      }
+
+      // Validate max nesting level (3 levels)
+      const targetLevel = this.getLevel(targetParentId)
+      if (targetLevel >= 3) {
+        throw new Error('目录层级最多为3级')
+      }
+    }
+
+    const now = new Date().toISOString()
+    this.fileManager.updateDirectory(id, {
+      parentId: targetParentId,
+      updatedAt: now,
+    })
+
+    // Move all notes in this directory and its descendants with it
+    const allIds = [id, ...this.getDescendantIds(id)]
+    for (const note of meta.notes) {
+      if (note.directoryId && allIds.includes(note.directoryId)) {
+        this.fileManager.updateNote(note.id, { updatedAt: now })
+      }
+    }
+
+    return true
+  }
+
   delete(id: string): boolean {
     const meta = this.fileManager.getMetadata()
 
@@ -136,3 +180,4 @@ export class DirectoryService {
     return parts
   }
 }
+

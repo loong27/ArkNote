@@ -69,6 +69,11 @@ export class NoteService {
   }
 
   move(id: string, targetDirectoryId: string): void {
+    const meta = this.fileManager.getMetadata()
+    if (!meta.directories.some(d => d.id === targetDirectoryId)) {
+      throw new Error('目标目录不存在')
+    }
+
     const now = new Date().toISOString()
     const order = this.list().filter(n => n.directoryId === targetDirectoryId).length
     this.fileManager.updateNote(id, {
@@ -139,3 +144,4 @@ export class NoteService {
     this.noteModified.clear()
   }
 }
+

@@ -42,6 +42,8 @@ const api: ElectronAPI = {
       ipcRenderer.invoke('directories:create', parentId, name),
     rename: (id: string, name: string) =>
       ipcRenderer.invoke('directories:rename', id, name),
+    move: (id: string, targetParentId: string | null) =>
+      ipcRenderer.invoke('directories:move', id, targetParentId),
     delete: (id: string) => ipcRenderer.invoke('directories:delete', id),
     getLevel: (id: string) => ipcRenderer.invoke('directories:getLevel', id),
   },
@@ -163,3 +165,4 @@ const api: ElectronAPI = {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
+

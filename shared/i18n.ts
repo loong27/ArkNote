@@ -94,6 +94,12 @@ const EN_TRANSLATIONS: Record<string, string> = {
   '未找到匹配的目录或笔记': 'No matching folders or notes',
   '暂无目录，点击上方新增创建': 'No folders yet. Use New above to create one',
   '移入回收站': 'Move to trash',
+  '将「{name}」移动到目标文件夹': 'Move "{name}" to a folder',
+  '不能将目录移动到其子目录中': 'Cannot move a folder into its own subfolder',
+  '不能将目录移动到自身或其子目录中': 'Cannot move a folder into itself or its subfolders',
+  '请将笔记拖入具体文件夹': 'Drop the note into a specific folder',
+  '等待保存完成后重试': 'Wait for the save to finish and try again',
+  '移动失败': 'Move failed',
   '确定要将目录「{name}」及其所有内容移入回收站吗？': 'Move the folder "{name}" and all of its contents to trash?',
   '确定要将笔记「{name}」移入回收站吗？': 'Move the note "{name}" to trash?',
   '搜索标签...': 'Search tags...',
@@ -506,3 +512,4 @@ export function getDateLocale(language: AppLanguage): string {
 export function getEnglishTranslations(): Readonly<Record<string, string>> {
   return EN_TRANSLATIONS
 }
+

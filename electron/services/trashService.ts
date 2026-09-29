@@ -351,7 +351,7 @@ export class TrashService {
 
     const meta = this.fileManager.getMetadata()
     // Support old trash entries that lack the metadata field
-    const noteMeta: NoteMetadata = item.metadata ?? {
+    const noteMeta: NoteMetadata = (item.metadata as NoteMetadata | undefined) ?? {
       id: item.id,
       title: item.name,
       directoryId: item.directoryId ?? this.getFallbackDirectoryId(meta) ?? '',
@@ -527,7 +527,7 @@ export class TrashService {
       return {
         id: noteId,
         content,
-        metadata: { ...item.metadata },
+        metadata: item.metadata as NoteMetadata,
       }
     } catch {
       return null
@@ -541,3 +541,4 @@ export class TrashService {
     this.trashMetadata = null
   }
 }
+

@@ -45,6 +45,7 @@ export const DirectoryTree: React.FC = () => {
     openNote,
     loadData,
     runAfterPendingSave,
+    flushPendingSaves,
   } = useStore()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -60,6 +61,12 @@ export const DirectoryTree: React.FC = () => {
   const [openDirMenuId, setOpenDirMenuId] = useState<string | null>(null)
   const [dirMenuPosition, setDirMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const [isCreateMenuOpen, setIsCreateMenuOpen] = useState(false)
+  const [dragItem, setDragItem] = useState<{ type: 'note' | 'dir'; id: string } | null>(null)
+  const [dropTarget, setDropTarget] = useState<string | null>(null)
+  const [dropPosition, setDropPosition] = useState<'inside' | 'root' | null>(null)
+  const [dropError, setDropError] = useState('')
+  const [dragOverRoot, setDragOverRoot] = useState(false)
+  const [dropHoverTimer, setDropHoverTimer] = useState<ReturnType<typeof setTimeout> | null>(null)
 
   // Filter directories and notes by search query
   const { filteredDirs, filteredNotes } = useMemo(() => {
@@ -177,6 +184,67 @@ export const DirectoryTree: React.FC = () => {
     openNote(note.id)
   }
 
+  const handleDragStart = (type: 'note' | 'dir', id: string, e: React.DragEvent) => {
+    e.stopPropagation()
+    e.dataTransfer.effectAllowed = 'move'
+    try {
+      e.dataTransfer.setData('text/plain', id)
+    } catch {
+      // Firefox-style fallback not needed in Electron
+    }
+    setDragItem({ type, id })
+    setDropTarget(null)
+    setDropPosition(null)
+    setDragOverRoot(false)
+    setDropError('')
+  }
+
+  const handleDragEnd = () => {
+    setDragItem(null)
+    setDropTarget(null)
+    setDropPosition(null)
+    setDragOverRoot(false)
+    setDropError('')
+    if (dropHoverTimer) clearTimeout(dropHoverTimer)
+  }
+
+  // Auto-expand a folder while hovering over it during drag
+  const scheduleDirExpand = (dirId: string) => {
+    if (dropHoverTimer) clearTimeout(dropHoverTimer)
+    const timer = setTimeout(() => {
+      if (dragItem) {
+        const expanded = new Set(useStore.getState().expandedDirs)
+        expanded.add(dirId)
+        useStore.getState().setExpandedDirs(expanded)
+      }
+    }, 700)
+    setDropHoverTimer(timer)
+  }
+
+  const clearDropHoverTimer = () => {
+    if (dropHoverTimer) {
+      clearTimeout(dropHoverTimer)
+      setDropHoverTimer(null)
+    }
+  }
+
+  const isDirDescendantOf = (dirId: string, ancestorId: string): boolean => {
+    let current = dirById.get(dirId)?.parentId ?? null
+    while (current) {
+      if (current === ancestorId) return true
+      current = dirById.get(current)?.parentId ?? null
+    }
+    return false
+  }
+
+  const getDropHint = () => {
+    if (!dragItem) return ''
+    const label = dragItem.type === 'note'
+      ? (notes.find(n => n.id === dragItem.id)?.title ?? '')
+      : (dirById.get(dragItem.id)?.name ?? '')
+    return t('将「{name}」移动到目标文件夹', { name: label })
+  }
+
   const handleCreateDir = async (parentId: string | null) => {
     setCreatingIn({ parentId, type: 'dir' })
     setCreateValue('')
@@ -284,6 +352,51 @@ export const DirectoryTree: React.FC = () => {
     setDeleteConfirm(null)
   }
 
+  const handleDropMove = async (targetDirId: string | null) => {
+    if (!dragItem) return
+    const source = dragItem
+    const finalTarget = targetDirId
+
+    // Notes cannot live at root (no root note container exists), only inside a folder
+    if (source.type === 'note' && targetDirId === null) {
+      setDropError(t('请将笔记拖入具体文件夹'))
+      setDropTarget(null)
+      setDropPosition('root')
+      return
+    }
+
+    let error: unknown = null
+    if (!(await flushPendingSaves())) {
+      setDropError(t('等待保存完成后重试'))
+      return
+    }
+
+    try {
+      if (source.type === 'note') {
+        await window.electronAPI.notes.move(source.id, targetDirId ?? '')
+      } else {
+        await window.electronAPI.directories.move(source.id, targetDirId)
+      }
+    } catch (err) {
+      error = err
+    }
+
+    if (error) {
+      setDropError(error instanceof Error ? error.message : t('移动失败'))
+      setDropTarget(finalTarget)
+      setDropPosition(finalTarget === null ? 'root' : 'inside')
+      return
+    }
+
+    await loadData()
+    setDropError('')
+    setDragItem(null)
+    setDropTarget(null)
+    setDropPosition(null)
+    setDragOverRoot(false)
+    if (dropHoverTimer) clearTimeout(dropHoverTimer)
+  }
+
   // Import handlers
   const handleImportMd = async (directoryId: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -321,9 +434,47 @@ export const DirectoryTree: React.FC = () => {
     return (
       <React.Fragment key={dir.id}>
         <div
-          className={`tree-item ${isActive ? 'active' : ''}`}
+          className={`tree-item ${isActive ? 'active' : ''} ${dropTarget === dir.id ? `drop-${dropPosition}` : ''}`}
           style={{ '--indent-level': level } as React.CSSProperties}
           onClick={() => handleDirClick(dir)}
+          draggable
+          onDragStart={(e) => handleDragStart('dir', dir.id, e)}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            e.dataTransfer.dropEffect = 'move'
+            if (!dragItem || dragItem.id === dir.id) return
+            if (dropTarget !== dir.id || dropPosition !== 'inside') {
+              setDropTarget(dir.id)
+              setDropPosition('inside')
+              if (!expandedDirs.has(dir.id)) {
+                scheduleDirExpand(dir.id)
+              } else {
+                clearDropHoverTimer()
+              }
+            }
+          }}
+          onDragLeave={(e) => {
+            e.stopPropagation()
+            if (e.currentTarget.contains(e.relatedTarget as Node)) return
+            setDropTarget(null)
+            setDropPosition(null)
+            clearDropHoverTimer()
+          }}
+          onDrop={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            if (!dragItem || dragItem.id === dir.id) return
+            if (dragItem.type === 'dir' && dir.id === dragItem.id) return
+            if (dragItem.type === 'dir' && isDirDescendantOf(dir.id, dragItem.id)) {
+              setDropError(t('不能将目录移动到其子目录中'))
+              return
+            }
+            setDropTarget(dir.id)
+            setDropPosition('inside')
+            handleDropMove(dir.id)
+          }}
         >
           <span className={`tree-chevron ${isExpanded ? 'expanded' : ''}`}>
             <ChevronRight size={14} strokeWidth={1.5} />
@@ -480,9 +631,29 @@ export const DirectoryTree: React.FC = () => {
             {childNotes.map(note => (
               <div
                 key={note.id}
-                className={`tree-item ${currentNote?.id === note.id ? 'active' : ''}`}
+                className={`tree-item ${currentNote?.id === note.id ? 'active' : ''} ${dragItem?.type === 'note' && dragItem.id === note.id ? 'dragging' : ''}`}
                 style={{ '--indent-level': level + 1 } as React.CSSProperties}
                 onClick={() => handleNoteClick(note)}
+                draggable
+                onDragStart={(e) => handleDragStart('note', note.id, e)}
+                onDragEnd={handleDragEnd}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  e.dataTransfer.dropEffect = 'move'
+                  if (dragItem) {
+                    setDropTarget(dir.id)
+                    setDropPosition('inside')
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (!dragItem) return
+                  setDropTarget(dir.id)
+                  setDropPosition('inside')
+                  handleDropMove(dir.id)
+                }}
               >
                 <span className="tree-chevron" style={{ visibility: 'hidden' }}>
                   <ChevronRight size={14} strokeWidth={1.5} />
@@ -578,7 +749,51 @@ export const DirectoryTree: React.FC = () => {
         </div>
       </div>
 
-      <div className="sidebar-content">
+      <div
+        className={`sidebar-content ${dragItem && dropPosition === 'root' ? 'drop-root' : ''} ${dragOverRoot ? 'drag-over-root' : ''}`}
+        onClick={() => {
+          if (!dragItem) return
+          setDragOverRoot(false)
+        }}
+        onDragOver={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          if (!dragItem) return
+          if (dragItem.type === 'note') {
+            e.dataTransfer.dropEffect = 'none'
+            setDropError(t('请将笔记拖入具体文件夹'))
+            setDropTarget(null)
+            setDropPosition(null)
+            return
+          }
+          e.dataTransfer.dropEffect = 'move'
+          setDragOverRoot(true)
+          setDropError('')
+          clearDropHoverTimer()
+        }}
+        onDragLeave={(e) => {
+          e.stopPropagation()
+          if (e.currentTarget.contains(e.relatedTarget as Node)) return
+          setDragOverRoot(false)
+          setDropTarget(null)
+          setDropPosition(null)
+        }}
+        onDrop={(e) => {
+          e.preventDefault()
+          e.stopPropagation()
+          if (!dragItem) return
+          if (dragItem.type === 'note') {
+            setDropError(t('请将笔记拖入具体文件夹'))
+            setDropTarget(null)
+            setDropPosition(null)
+            return
+          }
+          setDragOverRoot(false)
+          setDropTarget(null)
+          setDropPosition('root')
+          handleDropMove(null)
+        }}
+      >
         {creatingIn && creatingIn.parentId === null && (
           <div className="tree-item" style={{ '--indent-level': 0 } as React.CSSProperties}>
             <span className="tree-icon">
@@ -603,10 +818,17 @@ export const DirectoryTree: React.FC = () => {
 
         {rootDirs.map(dir => renderDir(dir, 0))}
 
-        {rootDirs.length === 0 && !creatingIn && (
+        {rootDirs.length === 0 && !creatingIn && !dragItem && (
           <div className="empty-state">
             <Folder size={32} strokeWidth={1.5} />
             <p>{searchQuery ? t('未找到匹配的目录或笔记') : t('暂无目录，点击上方新增创建')}</p>
+          </div>
+        )}
+
+        {dragItem && (
+          <div className={`tree-drop-hint ${dropPosition === 'root' ? 'root' : ''}`}>
+            <span>{getDropHint()}</span>
+            {dropError && <em className="tree-drop-error">{dropError}</em>}
           </div>
         )}
       </div>
@@ -629,3 +851,23 @@ export const DirectoryTree: React.FC = () => {
     </>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

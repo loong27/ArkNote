@@ -228,6 +228,7 @@ export interface ElectronAPI {
     list: () => Promise<Directory[]>
     create: (parentId: string | null, name: string) => Promise<Directory>
     rename: (id: string, name: string) => Promise<void>
+    move: (id: string, targetParentId: string | null) => Promise<boolean>
     delete: (id: string) => Promise<boolean>
     getLevel: (id: string) => Promise<number>
   }
@@ -338,3 +339,4 @@ declare global {
     electronAPI: ElectronAPI
   }
 }
+

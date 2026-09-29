@@ -563,6 +563,10 @@ export function registerIpcHandlers(
     directoryService.rename(id, name)
   })
 
+  ipcMain.handle('directories:move', async (_event, id: string, targetParentId: string | null) => {
+    return directoryService.move(id, targetParentId)
+  })
+
   // Delete directory now moves to trash
   ipcMain.handle('directories:delete', async (_event, id: string) => {
     trashService.trashDirectory(id)
@@ -828,3 +832,4 @@ export function registerIpcHandlers(
     },
   }
 }
+
