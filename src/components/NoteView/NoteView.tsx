@@ -201,6 +201,8 @@ export const NoteView: React.FC = () => {
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null)
   const saveInFlightRef = useRef<Promise<void> | null>(null)
   const latestContentRef = useRef('')
+  const appliedNoteIdRef = useRef<string | null>(null)
+  const appliedStoreContentRef = useRef<string | null>(null)
   const [renderedHtml, setRenderedHtml] = useState('')
   const [searchHighlights, setSearchHighlights] = useState<SearchMatch[]>([])
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0)
@@ -551,25 +553,36 @@ export const NoteView: React.FC = () => {
       saveTimerRef.current = null
     }
 
-    if (saveInFlightRef.current) {
-      await saveInFlightRef.current
-      return
-    }
-
-    const nextContent = latestContentRef.current
     const noteId = currentNote.id
 
-    const savePromise = (async () => {
+    // Join any in-flight save so concurrent flushes serialize.
+    while (saveInFlightRef.current) {
+      await saveInFlightRef.current
+    }
+
+    let savePromise!: Promise<void>
+    savePromise = (async () => {
       markSaveStarted(noteId)
       try {
-        await window.electronAPI.notes.update(noteId, nextContent)
-        markSaveSucceeded(noteId)
+        // Keep writing until latestContentRef is stable across the async update.
+        let contentToWrite = latestContentRef.current
+        while (true) {
+          await window.electronAPI.notes.update(noteId, contentToWrite)
+          if (latestContentRef.current === contentToWrite) {
+            markSaveSucceeded(noteId)
+            return
+          }
+          contentToWrite = latestContentRef.current
+          markSaveStarted(noteId)
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : t('保存失败')
         markSaveFailed(noteId, message)
         throw error
       } finally {
-        saveInFlightRef.current = null
+        if (saveInFlightRef.current === savePromise) {
+          saveInFlightRef.current = null
+        }
       }
     })()
 
@@ -624,10 +637,21 @@ export const NoteView: React.FC = () => {
     }, 2000)
   }, [clearSaveError, currentNote, flushCurrentNote, isTrashNote, markNoteDirty])
 
-  // Sync content when note changes — use currentNote (not just id)
-  // to ensure content is always up to date when the note object changes
+  // Sync from store only when switching notes or when store content was replaced
+  // externally (refresh/open/version restore). Metadata-only updates (e.g. rename
+  // via loadData) must not overwrite the editor with stale open-time content.
   useEffect(() => {
-    if (currentNote) {
+    if (!currentNote) {
+      appliedNoteIdRef.current = null
+      appliedStoreContentRef.current = null
+      return
+    }
+
+    const noteChanged = currentNote.id !== appliedNoteIdRef.current
+    const storeContentReplaced =
+      !noteChanged && currentNote.content !== appliedStoreContentRef.current
+
+    if (noteChanged || storeContentReplaced) {
       const migratedContent = migrateLegacyBrandReferences(currentNote.content)
       const syncedContent = !isTrashNote
         ? setLeadingMarkdownTitle(migratedContent, currentNote.metadata.title, t('无标题'))
@@ -635,13 +659,31 @@ export const NoteView: React.FC = () => {
       setContent(syncedContent)
       latestContentRef.current = syncedContent
       setTitle(getLeadingMarkdownTitle(syncedContent) || currentNote.metadata.title)
+      appliedNoteIdRef.current = currentNote.id
+      appliedStoreContentRef.current = currentNote.content
       if (!isTrashNote && syncedContent !== currentNote.content) {
         handleContentChange(syncedContent)
       }
-      // Reset scroll position when switching notes
-      if (previewRef.current) {
+      if (noteChanged && previewRef.current) {
         previewRef.current.scrollTop = 0
       }
+      return
+    }
+
+    // Same note, same store content: title-only metadata update (sidebar rename / loadData)
+    if (isTrashNote) {
+      setTitle(currentNote.metadata.title)
+      return
+    }
+
+    const nextContent = setLeadingMarkdownTitle(
+      latestContentRef.current,
+      currentNote.metadata.title,
+      t('无标题'),
+    )
+    setTitle(getLeadingMarkdownTitle(nextContent) || currentNote.metadata.title)
+    if (nextContent !== latestContentRef.current) {
+      handleContentChange(nextContent)
     }
   }, [currentNote, isTrashNote, handleContentChange])
 

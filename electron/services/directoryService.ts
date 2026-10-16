@@ -45,43 +45,85 @@ export class DirectoryService {
   }
 
   /**
-   * Move a directory (and all its contents) to a new parent directory.
-   * Validates: target exists, max 3-level nesting, and target is not the directory itself or one of its descendants.
+   * Move a directory under a new parent, optionally inserting before a sibling.
+   * `beforeId` omitted/null appends to the end of the target parent's children.
+   * Same-parent calls still renumber siblings (reorder).
    */
-  move(id: string, targetParentId: string | null): boolean {
+  move(id: string, targetParentId: string | null, beforeId?: string | null): boolean {
     const meta = this.fileManager.getMetadata()
     const dir = meta.directories.find(d => d.id === id)
     if (!dir) return false
-    if (dir.parentId === targetParentId) return true
 
     if (targetParentId !== null) {
       const target = meta.directories.find(d => d.id === targetParentId)
       if (!target) throw new Error('目标目录不存在')
 
-      // Prevent moving into itself or its own descendants
       const descendants = this.getDescendantIds(id)
       if (targetParentId === id || descendants.includes(targetParentId)) {
         throw new Error('不能将目录移动到自身或其子目录中')
       }
 
-      // Validate max nesting level (3 levels)
       const targetLevel = this.getLevel(targetParentId)
       if (targetLevel >= 3) {
         throw new Error('目录层级最多为3级')
       }
     }
 
+    if (beforeId) {
+      const beforeDir = meta.directories.find(d => d.id === beforeId)
+      if (!beforeDir || beforeDir.parentId !== targetParentId) {
+        throw new Error('插入目标不存在')
+      }
+      if (beforeId === id) {
+        throw new Error('不能插入到自身之前')
+      }
+    }
+
     const now = new Date().toISOString()
+    const oldParentId = dir.parentId
+    const parentChanged = oldParentId !== targetParentId
+
+    const targetSiblings = meta.directories
+      .filter(d => d.parentId === targetParentId && d.id !== id)
+      .sort((a, b) => a.order - b.order)
+
+    let insertIndex = targetSiblings.length
+    if (beforeId) {
+      const idx = targetSiblings.findIndex(d => d.id === beforeId)
+      insertIndex = idx === -1 ? targetSiblings.length : idx
+    }
+
+    targetSiblings.splice(insertIndex, 0, dir)
+
     this.fileManager.updateDirectory(id, {
       parentId: targetParentId,
       updatedAt: now,
+      order: insertIndex,
     })
 
-    // Move all notes in this directory and its descendants with it
-    const allIds = [id, ...this.getDescendantIds(id)]
-    for (const note of meta.notes) {
-      if (note.directoryId && allIds.includes(note.directoryId)) {
-        this.fileManager.updateNote(note.id, { updatedAt: now })
+    targetSiblings.forEach((sibling, index) => {
+      if (sibling.id === id) return
+      if (sibling.order !== index) {
+        this.fileManager.updateDirectory(sibling.id, { order: index })
+      }
+    })
+
+    if (parentChanged) {
+      const oldSiblings = meta.directories
+        .filter(d => d.parentId === oldParentId && d.id !== id)
+        .sort((a, b) => a.order - b.order)
+      oldSiblings.forEach((sibling, index) => {
+        if (sibling.order !== index) {
+          this.fileManager.updateDirectory(sibling.id, { order: index })
+        }
+      })
+
+      // Touch notes in this directory and its descendants (sync/mtime signal)
+      const allIds = [id, ...this.getDescendantIds(id)]
+      for (const note of meta.notes) {
+        if (note.directoryId && allIds.includes(note.directoryId)) {
+          this.fileManager.updateNote(note.id, { updatedAt: now })
+        }
       }
     }
 

@@ -218,7 +218,7 @@ export interface ElectronAPI {
     update: (id: string, content: string) => Promise<void>
     updateTitle: (id: string, title: string) => Promise<void>
     delete: (id: string) => Promise<void>
-    move: (id: string, targetDirectoryId: string) => Promise<void>
+    move: (id: string, targetDirectoryId: string, beforeId?: string | null) => Promise<void>
     download: (id: string) => Promise<void>
     exportPdf: (id: string, htmlContent: string) => Promise<void>
     batchExport: (directoryId?: string) => Promise<{ success: boolean; message: string }>
@@ -228,7 +228,7 @@ export interface ElectronAPI {
     list: () => Promise<Directory[]>
     create: (parentId: string | null, name: string) => Promise<Directory>
     rename: (id: string, name: string) => Promise<void>
-    move: (id: string, targetParentId: string | null) => Promise<boolean>
+    move: (id: string, targetParentId: string | null, beforeId?: string | null) => Promise<boolean>
     delete: (id: string) => Promise<boolean>
     getLevel: (id: string) => Promise<number>
   }

@@ -68,19 +68,66 @@ export class NoteService {
     this.clearTimers(id)
   }
 
-  move(id: string, targetDirectoryId: string): void {
+  /**
+   * Move a note into a directory, optionally inserting before a sibling.
+   * `beforeId` omitted/null appends to the end of the target directory.
+   */
+  move(id: string, targetDirectoryId: string, beforeId?: string | null): void {
     const meta = this.fileManager.getMetadata()
+    const note = meta.notes.find(n => n.id === id)
+    if (!note) throw new Error(`Note not found: ${id}`)
     if (!meta.directories.some(d => d.id === targetDirectoryId)) {
       throw new Error('目标目录不存在')
     }
 
+    if (beforeId) {
+      const beforeNote = meta.notes.find(n => n.id === beforeId)
+      if (!beforeNote || beforeNote.directoryId !== targetDirectoryId) {
+        throw new Error('插入目标不存在')
+      }
+      if (beforeId === id) {
+        throw new Error('不能插入到自身之前')
+      }
+    }
+
     const now = new Date().toISOString()
-    const order = this.list().filter(n => n.directoryId === targetDirectoryId).length
+    const oldDirectoryId = note.directoryId
+
+    const targetSiblings = meta.notes
+      .filter(n => n.directoryId === targetDirectoryId && n.id !== id)
+      .sort((a, b) => a.order - b.order)
+
+    let insertIndex = targetSiblings.length
+    if (beforeId) {
+      const idx = targetSiblings.findIndex(n => n.id === beforeId)
+      insertIndex = idx === -1 ? targetSiblings.length : idx
+    }
+
+    targetSiblings.splice(insertIndex, 0, note)
+
     this.fileManager.updateNote(id, {
       directoryId: targetDirectoryId,
       updatedAt: now,
-      order,
+      order: insertIndex,
     })
+
+    targetSiblings.forEach((sibling, index) => {
+      if (sibling.id === id) return
+      if (sibling.order !== index) {
+        this.fileManager.updateNote(sibling.id, { order: index })
+      }
+    })
+
+    if (oldDirectoryId !== targetDirectoryId) {
+      const oldSiblings = meta.notes
+        .filter(n => n.directoryId === oldDirectoryId && n.id !== id)
+        .sort((a, b) => a.order - b.order)
+      oldSiblings.forEach((sibling, index) => {
+        if (sibling.order !== index) {
+          this.fileManager.updateNote(sibling.id, { order: index })
+        }
+      })
+    }
   }
 
   /**

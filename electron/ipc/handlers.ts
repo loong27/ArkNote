@@ -396,10 +396,13 @@ export function registerIpcHandlers(
     searchService.removeNote(id)
   })
 
-  ipcMain.handle('notes:move', async (_event, id: string, targetDirectoryId: string) => {
-    noteService.move(id, targetDirectoryId)
-    searchService.upsertNote(id)
-  })
+  ipcMain.handle(
+    'notes:move',
+    async (_event, id: string, targetDirectoryId: string, beforeId?: string | null) => {
+      noteService.move(id, targetDirectoryId, beforeId)
+      searchService.upsertNote(id)
+    },
+  )
 
   // Helper: export a single note MD with images to a target directory
   const exportNoteWithImages = (noteId: string, targetDir: string) => {
@@ -563,9 +566,12 @@ export function registerIpcHandlers(
     directoryService.rename(id, name)
   })
 
-  ipcMain.handle('directories:move', async (_event, id: string, targetParentId: string | null) => {
-    return directoryService.move(id, targetParentId)
-  })
+  ipcMain.handle(
+    'directories:move',
+    async (_event, id: string, targetParentId: string | null, beforeId?: string | null) => {
+      return directoryService.move(id, targetParentId, beforeId)
+    },
+  )
 
   // Delete directory now moves to trash
   ipcMain.handle('directories:delete', async (_event, id: string) => {

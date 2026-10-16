@@ -1666,6 +1666,36 @@ html, body, #root {
   color: var(--accent);
 }
 
+.tree-item.drop-before,
+.tree-item.drop-after {
+  position: relative;
+  background: transparent;
+  box-shadow: none;
+}
+
+.tree-item.drop-before::before,
+.tree-item.drop-after::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--indent-level, 0) * 16px + 8px);
+  right: 8px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.tree-item.drop-before::before {
+  top: 0;
+  box-shadow: 0 0 0 1px var(--accent-dim, transparent);
+}
+
+.tree-item.drop-after::after {
+  bottom: 0;
+  box-shadow: 0 0 0 1px var(--accent-dim, transparent);
+}
+
 .sidebar-content.drop-root,
 .sidebar-content.drag-over-root {
   background: var(--bg-primary);
@@ -1703,6 +1733,11 @@ html, body, #root {
 [data-theme="light"] .tree-item.drop-inside {
   background: var(--sidebar-active);
   box-shadow: inset 0 0 0 1.5px var(--accent);
+}
+
+[data-theme="light"] .tree-item.drop-before::before,
+[data-theme="light"] .tree-item.drop-after::after {
+  background: var(--accent);
 }
 
 [data-theme="light"] .tree-drop-hint {

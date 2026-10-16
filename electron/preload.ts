@@ -28,8 +28,8 @@ const api: ElectronAPI = {
     updateTitle: (id: string, title: string) =>
       ipcRenderer.invoke('notes:updateTitle', id, title),
     delete: (id: string) => ipcRenderer.invoke('notes:delete', id),
-    move: (id: string, targetDirectoryId: string) =>
-      ipcRenderer.invoke('notes:move', id, targetDirectoryId),
+    move: (id: string, targetDirectoryId: string, beforeId?: string | null) =>
+      ipcRenderer.invoke('notes:move', id, targetDirectoryId, beforeId),
     download: (id: string) => ipcRenderer.invoke('notes:download', id),
     exportPdf: (id: string, htmlContent: string) =>
       ipcRenderer.invoke('notes:exportPdf', id, htmlContent),
@@ -42,8 +42,8 @@ const api: ElectronAPI = {
       ipcRenderer.invoke('directories:create', parentId, name),
     rename: (id: string, name: string) =>
       ipcRenderer.invoke('directories:rename', id, name),
-    move: (id: string, targetParentId: string | null) =>
-      ipcRenderer.invoke('directories:move', id, targetParentId),
+    move: (id: string, targetParentId: string | null, beforeId?: string | null) =>
+      ipcRenderer.invoke('directories:move', id, targetParentId, beforeId),
     delete: (id: string) => ipcRenderer.invoke('directories:delete', id),
     getLevel: (id: string) => ipcRenderer.invoke('directories:getLevel', id),
   },
