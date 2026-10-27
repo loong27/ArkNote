@@ -76,6 +76,9 @@ const api: ElectronAPI = {
     selectAndSave: (noteId: string) =>
       ipcRenderer.invoke('images:selectAndSave', noteId),
   },
+  clipboard: {
+    writeImage: (dataUrl: string) => ipcRenderer.invoke('clipboard:writeImage', dataUrl),
+  },
   sync: {
     configure: (config) => ipcRenderer.invoke('sync:configure', config),
     sync: () => ipcRenderer.invoke('sync:run'),

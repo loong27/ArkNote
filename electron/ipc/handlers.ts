@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { ipcMain, dialog, BrowserWindow, clipboard, nativeImage } from 'electron'
 import path from 'path'
 import fs from 'fs'
 import { EncryptionService, VaultIntegrityError } from '../services/encryption'
@@ -664,6 +664,26 @@ export function registerIpcHandlers(
     const imageData = fs.readFileSync(filePath)
     const imageId = fileManager.saveImage(imageData, ext)
     return imageId
+  })
+
+  // ========== Clipboard ==========
+
+  ipcMain.handle('clipboard:writeImage', async (_event, dataUrl: string) => {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) {
+      return { success: false, message: 'Invalid image data' }
+    }
+
+    try {
+      const image = nativeImage.createFromDataURL(dataUrl)
+      if (image.isEmpty()) {
+        return { success: false, message: 'Empty image' }
+      }
+      clipboard.writeImage(image)
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return { success: false, message }
+    }
   })
 
   // ========== Trash / Recycle Bin ==========

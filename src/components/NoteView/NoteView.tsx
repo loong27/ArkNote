@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { Columns2, Edit3, Eye, Save, ChevronRight, X } from 'lucide-react'
+import { Columns2, Edit3, Eye, Save, ChevronRight, X, Copy, Check } from 'lucide-react'
 import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
 import abbr from 'markdown-it-abbr'
@@ -15,6 +15,7 @@ import mermaid from 'mermaid'
 import { useStore } from '../../store/useStore'
 import { NoteEditor } from './NoteEditor'
 import { NoteMenu } from './NoteMenu'
+import { NoteTagBar } from './NoteTagBar'
 import { SearchInNote } from './SearchInNote'
 import { EditorToolbar } from './EditorToolbar'
 import type { SearchMatch } from '../../types'
@@ -177,7 +178,6 @@ export const NoteView: React.FC = () => {
   const isEditing = useStore(s => s.isEditing)
   const noteSearchVisible = useStore(s => s.noteSearchVisible)
   const noteSearchQuery = useStore(s => s.noteSearchQuery)
-  const tags = useStore(s => s.tags)
   const theme = useStore(s => s.theme)
   const saveState = useStore(s => s.saveState)
   // Actions are stable references, no re-render risk
@@ -208,6 +208,8 @@ export const NoteView: React.FC = () => {
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0)
   const [imagePopupSrc, setImagePopupSrc] = useState<string | null>(null)
   const [imagePopupAlt, setImagePopupAlt] = useState('')
+  const [imageCopyState, setImageCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
+  const imageCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const previewPaneRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
@@ -537,7 +539,77 @@ export const NoteView: React.FC = () => {
   const closeImagePopup = useCallback(() => {
     setImagePopupSrc(null)
     setImagePopupAlt('')
+    setImageCopyState('idle')
+    if (imageCopyResetRef.current) {
+      clearTimeout(imageCopyResetRef.current)
+      imageCopyResetRef.current = null
+    }
   }, [])
+
+  const rasterizeImageToPngDataUrl = useCallback((src: string): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas')
+          canvas.width = img.naturalWidth || img.width
+          canvas.height = img.naturalHeight || img.height
+          if (!canvas.width || !canvas.height) {
+            reject(new Error('Invalid image dimensions'))
+            return
+          }
+          const ctx = canvas.getContext('2d')
+          if (!ctx) {
+            reject(new Error('Canvas unavailable'))
+            return
+          }
+          ctx.drawImage(img, 0, 0)
+          resolve(canvas.toDataURL('image/png'))
+        } catch (err) {
+          reject(err)
+        }
+      }
+      img.onerror = () => reject(new Error('Failed to load image'))
+      img.src = src
+    })
+  }, [])
+
+  const copyImagePopup = useCallback(async () => {
+    if (!imagePopupSrc) return
+
+    const flashState = (state: 'copied' | 'failed') => {
+      setImageCopyState(state)
+      if (imageCopyResetRef.current) clearTimeout(imageCopyResetRef.current)
+      imageCopyResetRef.current = setTimeout(() => {
+        setImageCopyState('idle')
+        imageCopyResetRef.current = null
+      }, 1600)
+    }
+
+    const tryWrite = async (dataUrl: string) => {
+      const result = await window.electronAPI.clipboard.writeImage(dataUrl)
+      return result.success
+    }
+
+    try {
+      const isSvg = /image\/svg\+xml/i.test(imagePopupSrc) || /\.svg(\?|#|$)/i.test(imagePopupSrc)
+      if (!isSvg && (await tryWrite(imagePopupSrc))) {
+        flashState('copied')
+        return
+      }
+
+      const pngDataUrl = await rasterizeImageToPngDataUrl(imagePopupSrc)
+      if (await tryWrite(pngDataUrl)) {
+        flashState('copied')
+        return
+      }
+
+      flashState('failed')
+    } catch (err) {
+      console.error('Copy image failed:', err)
+      flashState('failed')
+    }
+  }, [imagePopupSrc, rasterizeImageToPngDataUrl])
 
   useEffect(() => {
     if (!imagePopupSrc) return
@@ -545,12 +617,23 @@ export const NoteView: React.FC = () => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         closeImagePopup()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        e.preventDefault()
+        void copyImagePopup()
       }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [imagePopupSrc, closeImagePopup])
+  }, [imagePopupSrc, closeImagePopup, copyImagePopup])
+
+  useEffect(() => {
+    return () => {
+      if (imageCopyResetRef.current) clearTimeout(imageCopyResetRef.current)
+    }
+  }, [])
 
   // Handle clicking preview content: image popup + internal note links + external URLs
   useEffect(() => {
@@ -565,6 +648,11 @@ export const NoteView: React.FC = () => {
         if (src) {
           e.preventDefault()
           e.stopPropagation()
+          setImageCopyState('idle')
+          if (imageCopyResetRef.current) {
+            clearTimeout(imageCopyResetRef.current)
+            imageCopyResetRef.current = null
+          }
           setImagePopupSrc(src)
           setImagePopupAlt(img.alt || '')
         }
@@ -812,12 +900,6 @@ export const NoteView: React.FC = () => {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [noteSearchVisible, setNoteSearchVisible])
 
-  // Get note tags
-  const noteTags = useMemo(() => {
-    if (!currentNote) return []
-    return tags.filter(t => currentNote.metadata.tags.includes(t.id))
-  }, [currentNote, tags])
-
   if (!currentNote) return null
 
   const noteActions = (
@@ -902,21 +984,6 @@ export const NoteView: React.FC = () => {
               placeholder={t('无标题')}
               readOnly
             />
-
-            {/* Note tags */}
-            {noteTags.length > 0 && (
-              <div className="note-tags">
-                {noteTags.map(tag => (
-                  <span
-                    key={tag.id}
-                    className="note-tag-badge"
-                    style={{ backgroundColor: `${tag.color}33`, border: `1px solid ${tag.color}` }}
-                  >
-                    {tag.name}
-                  </span>
-                ))}
-              </div>
-            )}
           </div>
           <div className="note-toolbar-right">{noteActions}</div>
         </div>
@@ -937,6 +1004,12 @@ export const NoteView: React.FC = () => {
           </div>
         )
       )}
+
+      <NoteTagBar
+        noteId={currentNote.id}
+        tagIds={currentNote.metadata.tags}
+        readOnly={isTrashNote}
+      />
 
       {/* Search in note (floating, top-right) */}
       <SearchInNote onHighlight={handleSearchHighlight} />
@@ -966,7 +1039,42 @@ export const NoteView: React.FC = () => {
 
       {imagePopupSrc && ReactDOM.createPortal(
         <div className="image-lightbox-overlay" onClick={closeImagePopup}>
-          <button className="image-lightbox-close" onClick={closeImagePopup} aria-label={t('关闭原图预览')}>
+          <button
+            className={`image-lightbox-copy${imageCopyState === 'copied' ? ' is-success' : ''}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              void copyImagePopup()
+            }}
+            aria-label={
+              imageCopyState === 'copied'
+                ? t('已复制')
+                : imageCopyState === 'failed'
+                  ? t('复制失败')
+                  : t('复制图片')
+            }
+            title={
+              imageCopyState === 'copied'
+                ? t('已复制')
+                : imageCopyState === 'failed'
+                  ? t('复制失败')
+                  : t('复制图片')
+            }
+            disabled={imageCopyState === 'copied'}
+          >
+            {imageCopyState === 'copied' ? (
+              <Check size={20} strokeWidth={1.8} />
+            ) : (
+              <Copy size={20} strokeWidth={1.8} />
+            )}
+          </button>
+          <button
+            className="image-lightbox-close"
+            onClick={(e) => {
+              e.stopPropagation()
+              closeImagePopup()
+            }}
+            aria-label={t('关闭原图预览')}
+          >
             <X size={22} strokeWidth={1.8} />
           </button>
           <div className="image-lightbox-content" onClick={(e) => e.stopPropagation()}>

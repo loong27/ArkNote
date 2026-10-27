@@ -257,6 +257,10 @@ export interface ElectronAPI {
     get: (imageId: string) => Promise<string>
     selectAndSave: (noteId: string) => Promise<string | null>
   }
+  // Clipboard
+  clipboard: {
+    writeImage: (dataUrl: string) => Promise<{ success: boolean; message?: string }>
+  }
   // Sync
   sync: {
     configure: (config: SyncConfig) => Promise<void>
