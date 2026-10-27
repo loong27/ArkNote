@@ -2660,6 +2660,146 @@ html, body, #root {
   color: #fff !important;
 }
 
+/* CodeMirror find / replace panel */
+.editor-container .cm-editor .cm-panels {
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+}
+
+.editor-container .cm-editor .cm-panels-bottom {
+  border-top: none;
+}
+
+.editor-container .cm-editor .cm-panel.cm-search.yn-search-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 12px 10px;
+  padding: 8px 10px;
+  background: var(--popover-bg);
+  backdrop-filter: var(--popover-blur) var(--glass-saturate);
+  -webkit-backdrop-filter: var(--popover-blur) var(--glass-saturate);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg), var(--retina-border);
+  position: relative;
+  font-size: 13px;
+}
+
+.editor-container .cm-editor .yn-search-panel input,
+.editor-container .cm-editor .yn-search-panel button,
+.editor-container .cm-editor .yn-search-panel label {
+  margin: 0;
+}
+
+.editor-container .cm-editor .yn-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.editor-container .cm-editor .yn-search-input {
+  flex: 1;
+  min-width: 120px;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--bg-primary);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.editor-container .cm-editor .yn-search-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim);
+}
+
+.editor-container .cm-editor .yn-search-count {
+  flex-shrink: 0;
+  min-width: 3.2em;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.editor-container .cm-editor .yn-search-count.empty {
+  color: #e57373;
+}
+
+.editor-container .cm-editor .yn-search-actions,
+.editor-container .cm-editor .yn-search-options {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.editor-container .cm-editor .yn-search-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.editor-container .cm-editor .yn-search-btn:hover {
+  background: var(--bg-surface-hover);
+  color: var(--text-primary);
+}
+
+.editor-container .cm-editor .yn-search-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.editor-container .cm-editor .yn-search-option {
+  letter-spacing: -0.02em;
+}
+
+.editor-container .cm-editor .yn-search-close {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.editor-container .cm-editor .yn-search-text-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-container .cm-editor .yn-search-text-btn:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--border-light);
+}
+
+.editor-container .cm-editor .yn-search-replace-row .yn-search-input {
+  flex: 1;
+}
+
 .editor-container .cm-editor .cm-selectionBackground {
   background: var(--accent-dim) !important;
 }
@@ -3383,7 +3523,9 @@ html, body, #root {
 }
 
 .theme-toggle {
-  display: flex;
+  display: inline-grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: min(100%, 260px);
   background: var(--bg-surface);
   border-radius: var(--radius-md);
   padding: 2px;
@@ -3391,6 +3533,10 @@ html, body, #root {
 }
 
 .theme-toggle button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
   padding: 6px 12px;
   border: none;
   background: transparent;
@@ -3398,6 +3544,7 @@ html, body, #root {
   cursor: pointer;
   border-radius: var(--radius-sm);
   font-size: 13px;
+  text-align: center;
   transition: all var(--transition-fast);
 }
 

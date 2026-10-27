@@ -96,7 +96,7 @@ export class UpdateService {
     try {
       await autoUpdater.checkForUpdates()
     } catch (error) {
-      this.setError(error, '检查更新失败')
+      this.setCheckQuiet(error)
     }
     return this.getState()
   }
@@ -160,7 +160,11 @@ export class UpdateService {
       })
     })
     autoUpdater.on('error', (error: Error) => {
-      this.setError(error, '自动更新失败')
+      if (this.state.phase === 'downloading') {
+        this.setError(error, '下载更新失败')
+      } else {
+        this.setCheckQuiet(error)
+      }
     })
   }
 
@@ -170,6 +174,19 @@ export class UpdateService {
       return '当前 Linux 安装格式不支持应用内更新，请从 GitHub Release 更新'
     }
     return null
+  }
+
+  /** Check failures are silent: treat as up-to-date (no news is good news). */
+  private setCheckQuiet(error: unknown): void {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.warn('[updater] check failed (treated as up-to-date):', detail)
+    this.setState({
+      phase: 'not-available',
+      availableVersion: null,
+      progress: null,
+      checkedAt: new Date().toISOString(),
+      message: '当前已是最新版本',
+    })
   }
 
   private setError(error: unknown, prefix: string): void {

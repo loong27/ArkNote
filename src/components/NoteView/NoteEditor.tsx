@@ -4,9 +4,10 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLi
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
-import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
+import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { useStore } from '../../store/useStore'
 import { useI18n } from '../../i18n/I18nProvider'
+import { createEditorSearchPanel, editorSearchPhrases, openReplacePanel } from './editorSearchPanel'
 
 const darkTheme = EditorView.theme({
   '&': { backgroundColor: '#252932', color: '#f4f7fb' },
@@ -119,6 +120,8 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
         highlightActiveLineGutter(),
         history(),
         ...(!largeDocument ? [highlightSelectionMatches()] : []),
+        search({ createPanel: createEditorSearchPanel, top: false }),
+        EditorState.phrases.of(editorSearchPhrases(t)),
         largeDocument
           ? markdown({ base: markdownLanguage })
           : markdown({ base: markdownLanguage, codeLanguages: languages }),
@@ -128,6 +131,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
           ...defaultKeymap,
           ...historyKeymap,
           ...searchKeymap,
+          { key: 'Mod-h', run: openReplacePanel, scope: 'editor search-panel' },
           {
             key: 'Mod-s',
             run: () => {

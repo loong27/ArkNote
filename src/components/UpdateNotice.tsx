@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Download, RefreshCw, RotateCcw, X, AlertTriangle } from 'lucide-react'
+import { Download, RefreshCw, RotateCcw, X } from 'lucide-react'
 import type { AppUpdateState } from '../types'
 import { useI18n } from '../i18n/I18nProvider'
 
@@ -26,36 +26,29 @@ export const UpdateNotice: React.FC = () => {
   }, [])
 
   if (!state) return null
-  if (state.phase === 'error' && dismissedVersion === '__update_error__') return null
-  if (!['available', 'downloading', 'downloaded', 'error'].includes(state.phase)) return null
-  if (state.phase !== 'error' && state.availableVersion && dismissedVersion === state.availableVersion) return null
+  if (!['available', 'downloading', 'downloaded'].includes(state.phase)) return null
+  if (state.availableVersion && dismissedVersion === state.availableVersion) return null
 
   const handleAction = async () => {
     if (state.phase === 'available') {
       setState(await window.electronAPI.updates.download())
     } else if (state.phase === 'downloaded') {
       await window.electronAPI.updates.install()
-    } else if (state.phase === 'error') {
-      setState(await window.electronAPI.updates.check())
     }
   }
 
   return (
-    <aside className={`update-notice ${state.phase === 'error' ? 'error' : ''}`} aria-live="polite">
+    <aside className="update-notice" aria-live="polite">
       <div className="update-notice-icon" aria-hidden="true">
         {state.phase === 'downloaded'
           ? <RotateCcw size={18} strokeWidth={1.8} />
           : state.phase === 'downloading'
             ? <RefreshCw className="spin" size={18} strokeWidth={1.8} />
-            : state.phase === 'error'
-              ? <AlertTriangle size={18} strokeWidth={1.8} />
-              : <Download size={18} strokeWidth={1.8} />}
+            : <Download size={18} strokeWidth={1.8} />}
       </div>
       <div className="update-notice-copy">
         <strong>
-          {state.phase === 'downloaded' ? t('更新已就绪')
-            : state.phase === 'error' ? t('检查更新失败')
-              : t('arkNote 有新版本')}
+          {state.phase === 'downloaded' ? t('更新已就绪') : t('arkNote 有新版本')}
         </strong>
         <span>{t(state.message)}</span>
         {state.phase === 'downloading' && (
@@ -66,15 +59,13 @@ export const UpdateNotice: React.FC = () => {
       </div>
       {state.phase !== 'downloading' && (
         <button className="update-notice-action" type="button" onClick={handleAction}>
-          {state.phase === 'downloaded' ? t('重启安装')
-            : state.phase === 'error' ? t('重试')
-              : t('下载')}
+          {state.phase === 'downloaded' ? t('重启安装') : t('下载')}
         </button>
       )}
       <button
         className="update-notice-dismiss"
         type="button"
-        onClick={() => setDismissedVersion(state.phase === 'error' ? '__update_error__' : state.availableVersion)}
+        onClick={() => setDismissedVersion(state.availableVersion)}
         title={t('暂时关闭')}
       >
         <X size={15} strokeWidth={1.8} />
@@ -82,4 +73,3 @@ export const UpdateNotice: React.FC = () => {
     </aside>
   )
 }
-

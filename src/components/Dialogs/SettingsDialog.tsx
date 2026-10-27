@@ -445,52 +445,28 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                 <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
                   {t('关闭窗口时的操作')}
                 </h4>
-                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
                   {t('选择点击关闭按钮后的行为。')}
                 </p>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {[
-                    { value: 'ask' as const, label: t('每次询问'), desc: t('每次点击关闭按钮时弹出选择对话框') },
-                    { value: 'minimize' as const, label: t('最小化到托盘'), desc: t('直接隐藏窗口，应用在后台继续运行') },
-                    { value: 'quit' as const, label: t('退出应用'), desc: t('直接关闭并退出整个应用程序') },
-                  ].map(option => (
-                    <label
-                      key={option.value}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 10,
-                        padding: '12px 14px',
-                        borderRadius: 'var(--radius-lg)',
-                        border: `0.5px solid ${closeAction === option.value ? 'var(--accent)' : 'var(--border)'}`,
-                        background: closeAction === option.value ? 'var(--accent-dim)' : 'var(--bg-primary)',
-                        cursor: 'pointer',
-                        transition: 'all 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
-                        boxShadow: closeAction === option.value
-                          ? '0 0 0 0.5px var(--accent), var(--shadow-sm)'
-                          : 'var(--retina-border)',
-                      }}
-                    >
-                      <input
-                        type="radio"
-                        name="closeAction"
-                        value={option.value}
-                        checked={closeAction === option.value}
-                        onChange={() => handleCloseActionChange(option.value)}
-                        style={{ marginTop: 2, accentColor: 'var(--accent)' }}
-                      />
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                          {option.label}
-                        </div>
-                        <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: 2 }}>
-                          {option.desc}
-                        </div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
+                <select
+                  value={closeAction}
+                  onChange={(event) => handleCloseActionChange(event.target.value as 'ask' | 'minimize' | 'quit')}
+                  aria-label={t('关闭窗口时的操作')}
+                  style={{
+                    minWidth: 200,
+                    padding: '8px 10px',
+                    background: 'var(--bg-primary)',
+                    border: '0.5px solid var(--border)',
+                    borderRadius: 'var(--radius-md)',
+                    color: 'var(--text-primary)',
+                    fontSize: '13px',
+                    outline: 'none',
+                  }}
+                >
+                  <option value="ask">{t('每次询问')}</option>
+                  <option value="minimize">{t('最小化到托盘')}</option>
+                  <option value="quit">{t('退出应用')}</option>
+                </select>
               </div>
 
               <div style={{ paddingTop: 20, borderTop: '0.5px solid var(--border)' }}>
