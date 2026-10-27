@@ -209,9 +209,12 @@ export const NoteView: React.FC = () => {
   const [imagePopupSrc, setImagePopupSrc] = useState<string | null>(null)
   const [imagePopupAlt, setImagePopupAlt] = useState('')
   const previewRef = useRef<HTMLDivElement>(null)
+  const previewPaneRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
+  const [editorReadyTick, setEditorReadyTick] = useState(0)
   const showEditor = isEditing && !isTrashNote
   const showPreview = isTrashNote || !isEditing || livePreview
+  const isSplitView = showEditor && showPreview
 
   // Update mermaid theme when app theme changes
   useEffect(() => {
@@ -225,7 +228,57 @@ export const NoteView: React.FC = () => {
 
   const handleEditorReady = useCallback((view: EditorView | null) => {
     editorViewRef.current = view
+    setEditorReadyTick((tick) => tick + 1)
   }, [])
+
+  // Bi-directional scroll sync between editor and preview in split mode
+  useEffect(() => {
+    if (!isSplitView) return
+
+    const editorScroller = editorViewRef.current?.scrollDOM
+    const previewPane = previewPaneRef.current
+    if (!editorScroller || !previewPane) return
+
+    let syncing = false
+    let rafId = 0
+
+    const scrollRatio = (el: HTMLElement) => {
+      const max = el.scrollHeight - el.clientHeight
+      return max <= 0 ? 0 : el.scrollTop / max
+    }
+
+    const applyRatio = (el: HTMLElement, ratio: number) => {
+      const max = el.scrollHeight - el.clientHeight
+      el.scrollTop = max <= 0 ? 0 : ratio * max
+    }
+
+    const syncFrom = (source: HTMLElement, target: HTMLElement) => {
+      if (syncing) return
+      if (rafId) cancelAnimationFrame(rafId)
+      rafId = requestAnimationFrame(() => {
+        rafId = 0
+        syncing = true
+        applyRatio(target, scrollRatio(source))
+        // Release after the browser has applied scrollTop so the paired
+        // scroll event (if any) is ignored.
+        requestAnimationFrame(() => {
+          syncing = false
+        })
+      })
+    }
+
+    const onEditorScroll = () => syncFrom(editorScroller, previewPane)
+    const onPreviewScroll = () => syncFrom(previewPane, editorScroller)
+
+    editorScroller.addEventListener('scroll', onEditorScroll, { passive: true })
+    previewPane.addEventListener('scroll', onPreviewScroll, { passive: true })
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      editorScroller.removeEventListener('scroll', onEditorScroll)
+      previewPane.removeEventListener('scroll', onPreviewScroll)
+    }
+  }, [isSplitView, editorReadyTick])
 
   // If it's a trash note, force preview mode
   useEffect(() => {
@@ -664,8 +717,8 @@ export const NoteView: React.FC = () => {
       if (!isTrashNote && syncedContent !== currentNote.content) {
         handleContentChange(syncedContent)
       }
-      if (noteChanged && previewRef.current) {
-        previewRef.current.scrollTop = 0
+      if (noteChanged && previewPaneRef.current) {
+        previewPaneRef.current.scrollTop = 0
       }
       return
     }
@@ -889,7 +942,7 @@ export const NoteView: React.FC = () => {
       <SearchInNote onHighlight={handleSearchHighlight} />
 
       {/* Note body */}
-      <div className={`note-body ${!showEditor ? 'preview-note-body' : ''} ${showEditor && showPreview ? 'split-note-body' : ''}`}>
+      <div className={`note-body ${!showEditor ? 'preview-note-body' : ''} ${isSplitView ? 'split-note-body' : ''}`}>
         {showEditor && (
           <div className="note-editor-pane">
             <NoteEditor
@@ -901,7 +954,7 @@ export const NoteView: React.FC = () => {
           </div>
         )}
         {showPreview && (
-          <div className="note-preview-pane">
+          <div ref={previewPaneRef} className="note-preview-pane">
             <div
               ref={previewRef}
               className="markdown-preview"
