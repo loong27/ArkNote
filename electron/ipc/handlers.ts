@@ -531,7 +531,14 @@ export function registerIpcHandlers(
     }
   })
 
-  ipcMain.handle('notes:exportPdf', async (_event, id: string, htmlContent: string) => {
+  const SHARE_SLOGAN_ZH = '安全加密的跨平台笔记'
+  const buildSharePayload = (title: string, htmlContent: string) => ({
+    title,
+    bodyHtml: typeof htmlContent === 'string' ? htmlContent : '',
+    slogan: tr(SHARE_SLOGAN_ZH),
+  })
+
+  ipcMain.handle('notes:exportPdf', async (_event, id: string, htmlContent: string, title?: string) => {
     const note = noteService.get(id)
     const win = BrowserWindow.getFocusedWindow()
     if (!win) return
@@ -543,7 +550,55 @@ export function registerIpcHandlers(
     })
 
     if (!result.canceled && result.filePath) {
-      await pdfService.exportToPdf(htmlContent, result.filePath)
+      await pdfService.exportToPdf(
+        buildSharePayload(title || note.metadata.title, htmlContent),
+        result.filePath,
+      )
+    }
+  })
+
+  ipcMain.handle('notes:renderShareImage', async (_event, id: string, htmlContent: string, title?: string) => {
+    const note = noteService.get(id)
+    try {
+      const png = await pdfService.exportToPng(
+        buildSharePayload(title || note.metadata.title, htmlContent),
+      )
+      return {
+        success: true,
+        dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : String(error),
+      }
+    }
+  })
+
+  ipcMain.handle('notes:saveShareImage', async (_event, dataUrl: string, defaultName?: string) => {
+    const win = BrowserWindow.getFocusedWindow()
+    if (!win) return { success: false, message: '窗口未找到' }
+
+    const safeName = (defaultName || 'note').replace(/[<>:"/\\|?*]/g, '_')
+    const result = await dialog.showSaveDialog(win, {
+      title: tr('保存图片'),
+      defaultPath: `${safeName}.png`,
+      filters: [{ name: 'PNG', extensions: ['png'] }],
+    })
+
+    if (result.canceled || !result.filePath) {
+      return { success: false, canceled: true }
+    }
+
+    try {
+      const base64 = String(dataUrl || '').replace(/^data:image\/png;base64,/, '')
+      fs.writeFileSync(result.filePath, Buffer.from(base64, 'base64'))
+      return { success: true, filePath: result.filePath }
+    } catch (error) {
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : String(error),
+      }
     }
   })
 

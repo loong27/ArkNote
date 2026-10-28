@@ -31,8 +31,12 @@ const api: ElectronAPI = {
     move: (id: string, targetDirectoryId: string, beforeId?: string | null) =>
       ipcRenderer.invoke('notes:move', id, targetDirectoryId, beforeId),
     download: (id: string) => ipcRenderer.invoke('notes:download', id),
-    exportPdf: (id: string, htmlContent: string) =>
-      ipcRenderer.invoke('notes:exportPdf', id, htmlContent),
+    exportPdf: (id: string, htmlContent: string, title?: string) =>
+      ipcRenderer.invoke('notes:exportPdf', id, htmlContent, title),
+    renderShareImage: (id: string, htmlContent: string, title?: string) =>
+      ipcRenderer.invoke('notes:renderShareImage', id, htmlContent, title),
+    saveShareImage: (dataUrl: string, defaultName?: string) =>
+      ipcRenderer.invoke('notes:saveShareImage', dataUrl, defaultName),
     batchExport: (directoryId?: string) =>
       ipcRenderer.invoke('notes:batchExport', directoryId),
   },

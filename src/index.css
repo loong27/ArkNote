@@ -3464,6 +3464,72 @@ html, body, #root {
 }
 
 /* ================================================================
+   SHARE IMAGE DIALOG — long image export preview
+   ================================================================ */
+.share-image-dialog {
+  width: min(560px, 92vw);
+  max-height: min(86vh, 900px);
+}
+
+.share-image-dialog-body {
+  min-height: 220px;
+  max-height: min(62vh, 640px);
+  display: flex;
+  flex-direction: column;
+}
+
+.share-image-status {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--text-muted);
+  padding: 32px 12px;
+  text-align: center;
+}
+
+.share-image-status p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.share-image-spin {
+  animation: shareImageSpin 0.9s linear infinite;
+}
+
+@keyframes shareImageSpin {
+  to { transform: rotate(360deg); }
+}
+
+.share-image-preview-wrap {
+  overflow: auto;
+  border-radius: var(--radius-md, 10px);
+  background: #ebe7e0;
+  border: 0.5px solid var(--border-light);
+  padding: 16px;
+  display: flex;
+  justify-content: center;
+}
+
+.share-image-preview {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: auto;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  background: #faf8f5;
+}
+
+.share-image-dialog .dialog-footer .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ================================================================
    TAG DIALOG — search / create combobox
    ================================================================ */
 .tag-dialog {

@@ -5,23 +5,28 @@ import {
   FolderInput,
   History,
   FileOutput,
+  Image as ImageIcon,
   Tag,
   Trash2,
 } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { ConfirmDialog } from '../Dialogs/ConfirmDialog'
+import { ShareImageDialog } from '../Dialogs/ShareImageDialog'
 import { useI18n } from '../../i18n/I18nProvider'
 
 interface Props {
   noteId: string
   htmlContent: string
+  getExportHtml?: () => string
   trashMode?: boolean
 }
 
-export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) => {
+export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, getExportHtml, trashMode }) => {
   const { t } = useI18n()
   const [open, setOpen] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareHtml, setShareHtml] = useState('')
   const menuRef = useRef<HTMLDivElement>(null)
 
   const {
@@ -34,6 +39,16 @@ export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) =>
     currentNote,
     runAfterPendingSave,
   } = useStore()
+
+  const noteTitle = currentNote?.metadata?.title || t('未命名笔记')
+
+  const resolveExportHtml = () => {
+    try {
+      return getExportHtml?.() || htmlContent
+    } catch {
+      return htmlContent
+    }
+  }
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -55,7 +70,13 @@ export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) =>
 
   const handleExportPdf = async () => {
     setOpen(false)
-    await window.electronAPI.notes.exportPdf(noteId, htmlContent)
+    await window.electronAPI.notes.exportPdf(noteId, resolveExportHtml(), noteTitle)
+  }
+
+  const handleExportShareImage = () => {
+    setOpen(false)
+    setShareHtml(resolveExportHtml())
+    setShareOpen(true)
   }
 
   const handleMove = () => {
@@ -129,6 +150,10 @@ export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) =>
                   <History size={16} strokeWidth={1.5} />
                   <span>{t('历史版本')}</span>
                 </button>
+                <button className="note-menu-item" onClick={handleExportShareImage}>
+                  <ImageIcon size={16} strokeWidth={1.5} />
+                  <span>{t('导出长图')}</span>
+                </button>
                 <button className="note-menu-item" onClick={handleExportPdf}>
                   <FileOutput size={16} strokeWidth={1.5} />
                   <span>{t('导出为 PDF')}</span>
@@ -158,6 +183,16 @@ export const NoteMenu: React.FC<Props> = ({ noteId, htmlContent, trashMode }) =>
           danger
           onConfirm={handleConfirmDelete}
           onCancel={() => setShowDeleteConfirm(false)}
+        />
+      )}
+
+      {!trashMode && (
+        <ShareImageDialog
+          open={shareOpen}
+          noteId={noteId}
+          title={noteTitle}
+          htmlContent={shareHtml}
+          onClose={() => setShareOpen(false)}
         />
       )}
     </>

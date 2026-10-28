@@ -220,7 +220,16 @@ export interface ElectronAPI {
     delete: (id: string) => Promise<void>
     move: (id: string, targetDirectoryId: string, beforeId?: string | null) => Promise<void>
     download: (id: string) => Promise<void>
-    exportPdf: (id: string, htmlContent: string) => Promise<void>
+    exportPdf: (id: string, htmlContent: string, title?: string) => Promise<void>
+    renderShareImage: (
+      id: string,
+      htmlContent: string,
+      title?: string,
+    ) => Promise<{ success: boolean; dataUrl?: string; message?: string }>
+    saveShareImage: (
+      dataUrl: string,
+      defaultName?: string,
+    ) => Promise<{ success: boolean; canceled?: boolean; filePath?: string; message?: string }>
     batchExport: (directoryId?: string) => Promise<{ success: boolean; message: string }>
   }
   // Directories

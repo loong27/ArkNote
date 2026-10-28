@@ -965,7 +965,24 @@ export const NoteView: React.FC = () => {
         </div>
       )}
 
-      <NoteMenu noteId={currentNote.id} htmlContent={renderedHtml} trashMode={isTrashNote} />
+      <NoteMenu
+        noteId={currentNote.id}
+        htmlContent={sanitizedHtml}
+        getExportHtml={() => {
+          const preview = previewRef.current
+          if (!preview) return sanitizedHtml
+          const clone = preview.cloneNode(true) as HTMLElement
+          clone.querySelectorAll('.md-code-copy').forEach((el) => el.remove())
+          clone.querySelectorAll('mark.search-highlight').forEach((mark) => {
+            const parent = mark.parentNode
+            if (!parent) return
+            while (mark.firstChild) parent.insertBefore(mark.firstChild, mark)
+            parent.removeChild(mark)
+          })
+          return clone.innerHTML || sanitizedHtml
+        }}
+        trashMode={isTrashNote}
+      />
     </div>
   )
 
