@@ -3,6 +3,7 @@ import { FileText, LayoutGrid, LayoutList } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { format } from 'date-fns'
 import { useI18n } from '../../i18n/I18nProvider'
+import { NoteEntryCard } from './DirectoryCards'
 
 export const TagNoteView: React.FC = () => {
   const { t } = useI18n()
@@ -87,21 +88,11 @@ export const TagNoteView: React.FC = () => {
         <div className={directoryViewMode === 'card' ? 'directory-grid' : 'directory-list'}>
           {tagNotes.map(note => (
             directoryViewMode === 'card' ? (
-              <div
+              <NoteEntryCard
                 key={note.id}
-                className="directory-card"
-                onClick={() => openNote(note.id)}
-              >
-                <div className="card-icon">
-                  <FileText size={24} strokeWidth={1.5} />
-                </div>
-                <div className="card-info">
-                  <div className="card-title">{note.title}</div>
-                  <div className="card-meta">
-                    {format(new Date(note.updatedAt), 'yyyy-MM-dd HH:mm')}
-                  </div>
-                </div>
-              </div>
+                note={note}
+                onOpen={openNote}
+              />
             ) : (
               <div
                 key={note.id}

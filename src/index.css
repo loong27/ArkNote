@@ -2115,8 +2115,9 @@ html, body, #root {
 
 .directory-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+  align-items: stretch;
 }
 
 .directory-list {
@@ -2157,58 +2158,146 @@ html, body, #root {
   white-space: nowrap;
 }
 
-/* Bento Grid Card — Youdao-inspired glassmorphism card */
+/* Vertical entry cards — accent only on hover/focus */
 .directory-card {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: var(--glass-bg);
-  backdrop-filter: blur(16px) saturate(140%);
-  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  min-height: 116px;
+  padding: 14px 16px;
+  margin: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-surface);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all 0.25s var(--spring);
-  border: 0.5px solid var(--border);
-  border-left: 3px solid var(--accent);
-  box-shadow: var(--retina-border), var(--bezel-highlight);
+  transition: background 0.2s var(--spring), border-color 0.2s var(--spring),
+    box-shadow 0.2s var(--spring), transform 0.2s var(--spring);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .directory-card:hover {
   background: var(--bg-surface-hover);
   border-color: var(--accent);
-  border-left-width: 3px;
-  transform: translateY(-2px) scale(1.01);
-  box-shadow: var(--shadow), 0 0 0 0.5px var(--accent-glow);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow), 0 0 0 1px var(--accent-glow);
+}
+
+.directory-card:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--shadow), 0 0 0 2px var(--accent-dim);
 }
 
 .directory-card:active {
-  transform: scale(0.98);
+  transform: translateY(0);
+}
+
+.directory-card--folder {
+  background: var(--accent-dim);
+  border-color: var(--border-light);
+}
+
+.directory-card--folder:hover {
+  background: var(--bg-surface-hover);
+}
+
+.directory-card--folder .card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: rgba(102, 204, 255, 0.12);
+  color: var(--accent);
+}
+
+.directory-card--note .card-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
 }
 
 .directory-card .card-icon {
-  color: var(--accent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  opacity: 0.85;
 }
 
 .directory-card .card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   flex: 1;
+  width: 100%;
   min-width: 0;
 }
 
 .directory-card .card-title {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 560;
+  line-height: 1.35;
+  color: var(--text-primary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.directory-card .card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 0;
+}
+
+.directory-card .card-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 7px 2px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+.directory-card .card-tag-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.directory-card .card-tag-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 72px;
+}
+
+.directory-card .card-tag--more {
+  padding-left: 7px;
+  color: var(--text-muted);
 }
 
 .directory-card .card-meta {
+  margin-top: auto;
   font-size: 12px;
   color: var(--text-muted);
-  margin-top: 2px;
+  letter-spacing: 0.01em;
 }
 
 .note-list-section {
@@ -2889,8 +2978,12 @@ html, body, #root {
 }
 
 .tree-menu-dropdown {
+  /* Portaled to body — must be viewport-fixed, not clipped by sidebar overflow/backdrop-filter */
   position: fixed;
+  top: 0;
+  left: 0;
   right: auto;
+  bottom: auto;
   margin-top: 0;
   z-index: 1000;
 }
@@ -5574,17 +5667,41 @@ html[data-theme="light"] .app {
 [data-theme="light"] .tag-note-item {
   background: #ffffff;
   border: 1px solid var(--color-border-subtle);
-  border-left: 3px solid var(--color-primary-soft);
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+[data-theme="light"] .directory-card--folder {
+  background: var(--color-primary-soft);
+  border-color: #dbe5f0;
+}
+
+[data-theme="light"] .directory-card--folder .card-icon {
+  background: rgba(37, 99, 235, 0.1);
+  color: var(--color-primary);
+}
+
+[data-theme="light"] .directory-card--note .card-icon {
+  background: #f1f5f9;
+  color: var(--color-text-secondary);
+}
+
+[data-theme="light"] .directory-card .card-tag {
+  background: #f8fafc;
+  border-color: var(--color-border-light);
+  color: var(--color-text-secondary);
 }
 
 [data-theme="light"] .directory-card:hover,
 [data-theme="light"] .tag-note-item:hover {
   background: #ffffff;
-  border-color: #dbe5f0;
-  border-left-color: var(--color-primary);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07);
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07), 0 0 0 1px rgba(37, 99, 235, 0.18);
+}
+
+[data-theme="light"] .directory-card:focus-visible {
+  border-color: var(--color-primary);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.07), 0 0 0 2px rgba(37, 99, 235, 0.2);
 }
 
 [data-theme="light"] .modal,

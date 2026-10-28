@@ -3,7 +3,6 @@ import {
   Folder,
   FolderOpen,
   FileText,
-  ChevronRight,
   ChevronsUpDown,
   ChevronsDownUp,
   LayoutGrid,
@@ -14,6 +13,7 @@ import { useStore } from '../../store/useStore'
 import { format } from 'date-fns'
 import type { Directory } from '../../types'
 import { useI18n } from '../../i18n/I18nProvider'
+import { FolderEntryCard, NoteEntryCard } from './DirectoryCards'
 
 export const DirectoryView: React.FC = () => {
   const { t } = useI18n()
@@ -167,15 +167,12 @@ export const DirectoryView: React.FC = () => {
         <div className={directoryViewMode === 'card' ? 'directory-grid' : 'directory-list'}>
           {subDirs.map(dir => (
             directoryViewMode === 'card' ? (
-              <div key={dir.id} className="directory-card" onClick={() => handleDirClick(dir)}>
-                <div className="card-icon">
-                  <Folder size={24} strokeWidth={1.5} />
-                </div>
-                <div className="card-info">
-                  <div className="card-title">{dir.name}</div>
-                  <div className="card-meta">{t('{count} 篇笔记', { count: getDirectoryNoteCount(dir.id) })}</div>
-                </div>
-              </div>
+              <FolderEntryCard
+                key={dir.id}
+                dir={dir}
+                noteCount={getDirectoryNoteCount(dir.id)}
+                onOpen={handleDirClick}
+              />
             ) : (
               <div key={dir.id} className="directory-list-item" onClick={() => handleDirClick(dir)}>
                 <Folder size={18} strokeWidth={1.5} />
@@ -194,21 +191,11 @@ export const DirectoryView: React.FC = () => {
           <div className={directoryViewMode === 'card' ? 'directory-grid' : 'directory-list'}>
             {dirNotes.map(note => (
               directoryViewMode === 'card' ? (
-                <div
+                <NoteEntryCard
                   key={note.id}
-                  className="directory-card"
-                  onClick={() => openNote(note.id)}
-                >
-                  <div className="card-icon">
-                    <FileText size={24} strokeWidth={1.5} />
-                  </div>
-                  <div className="card-info">
-                    <div className="card-title">{note.title}</div>
-                    <div className="card-meta">
-                      {format(new Date(note.updatedAt), 'yyyy-MM-dd HH:mm')}
-                    </div>
-                  </div>
-                </div>
+                  note={note}
+                  onOpen={openNote}
+                />
               ) : (
                 <div
                   key={note.id}

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react'
+import ReactDOM from 'react-dom'
 import {
   ChevronRight,
   Folder,
@@ -19,9 +20,24 @@ import type { Directory, NoteMetadata } from '../../types'
 import { useI18n } from '../../i18n/I18nProvider'
 
 const leadingTitleRegex = /^(\s*)#\s+[^\n#].*?(?:\s+#*)?\s*(\r?\n|$)/
+const DIR_MENU_WIDTH = 180
+const DIR_MENU_HEIGHT = 136
+const DIR_MENU_PADDING = 8
 
 type DropPosition = 'before' | 'after' | 'inside' | 'root'
 type DropTarget = { type: 'note' | 'dir'; id: string }
+
+function getDirMenuPosition(rect: DOMRect): { top: number; left: number } {
+  const openUpward = window.innerHeight - rect.bottom < DIR_MENU_HEIGHT + DIR_MENU_PADDING
+  const top = openUpward
+    ? Math.max(DIR_MENU_PADDING, rect.top - DIR_MENU_HEIGHT - 4)
+    : rect.bottom + 4
+  const left = Math.min(
+    Math.max(rect.right - DIR_MENU_WIDTH, DIR_MENU_PADDING),
+    window.innerWidth - DIR_MENU_WIDTH - DIR_MENU_PADDING
+  )
+  return { top, left }
+}
 
 function setLeadingMarkdownTitle(markdown: string, noteTitle: string, untitled: string): string {
   const titleLine = `# ${noteTitle.trim() || untitled}`
@@ -154,7 +170,15 @@ export const DirectoryTree: React.FC = () => {
       setIsCreateMenuOpen(false)
     }
     document.addEventListener('click', closeMenu)
-    return () => document.removeEventListener('click', closeMenu)
+    if (openDirMenuId) {
+      window.addEventListener('resize', closeMenu)
+      window.addEventListener('scroll', closeMenu, true)
+    }
+    return () => {
+      document.removeEventListener('click', closeMenu)
+      window.removeEventListener('resize', closeMenu)
+      window.removeEventListener('scroll', closeMenu, true)
+    }
   }, [openDirMenuId, isCreateMenuOpen])
 
   const rootDirs = useMemo(
@@ -608,37 +632,27 @@ export const DirectoryTree: React.FC = () => {
             >
               <Plus size={14} strokeWidth={1.5} />
             </button>
-            <div
-              className="note-menu-container tree-overflow-menu"
-              onMouseLeave={() => {
-                if (openDirMenuId === dir.id) {
-                  setOpenDirMenuId(null)
-                  setDirMenuPosition(null)
-                }
-              }}
-            >
+            <div className="note-menu-container tree-overflow-menu">
               <button
                 className="icon-btn sm"
                 onClick={(e) => {
                   e.stopPropagation()
-                  const rect = e.currentTarget.getBoundingClientRect()
-                  const menuHeight = 136
-                  const menuWidth = 180
-                  const openUpward = window.innerHeight - rect.bottom < menuHeight + 8
-                  setDirMenuPosition({
-                    top: openUpward ? rect.top - menuHeight - 4 : rect.bottom + 4,
-                    left: Math.min(rect.left, window.innerWidth - menuWidth - 8),
-                  })
-                  setOpenDirMenuId(openDirMenuId === dir.id ? null : dir.id)
+                  if (openDirMenuId === dir.id) {
+                    setOpenDirMenuId(null)
+                    setDirMenuPosition(null)
+                    return
+                  }
+                  setDirMenuPosition(getDirMenuPosition(e.currentTarget.getBoundingClientRect()))
+                  setOpenDirMenuId(dir.id)
                 }}
                 data-tooltip={t('更多')}
               >
                 <MoreHorizontal size={14} strokeWidth={1.5} />
               </button>
-              {openDirMenuId === dir.id && dirMenuPosition && (
+              {openDirMenuId === dir.id && dirMenuPosition && ReactDOM.createPortal(
                 <div
                   className="note-menu-dropdown tree-menu-dropdown"
-                  style={{ top: dirMenuPosition.top, left: dirMenuPosition.left } as React.CSSProperties}
+                  style={{ top: dirMenuPosition.top, left: dirMenuPosition.left }}
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
@@ -686,7 +700,8 @@ export const DirectoryTree: React.FC = () => {
                     <Trash2 size={14} strokeWidth={1.5} />
                     {t('删除')}
                   </button>
-                </div>
+                </div>,
+                document.body
               )}
             </div>
           </div>
