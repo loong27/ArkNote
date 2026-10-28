@@ -23,6 +23,8 @@ import type { SearchMatch } from '../../types'
 import { EditorView } from '@codemirror/view'
 import { migrateLegacyBrandReferences } from '../../../shared/brand'
 import { useI18n } from '../../i18n/I18nProvider'
+import { copyArkNoteImageToClipboard, copyImageToClipboard } from '../../utils/copyImage'
+import { ImageContextMenu } from './ImageContextMenu'
 
 // Initialize markdown-it with HTML support + task lists
 const md = new MarkdownIt({
@@ -211,6 +213,11 @@ export const NoteView: React.FC = () => {
   const [imagePopupAlt, setImagePopupAlt] = useState('')
   const [imageCopyState, setImageCopyState] = useState<'idle' | 'copied' | 'failed'>('idle')
   const imageCopyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [imageContextMenu, setImageContextMenu] = useState<{
+    x: number
+    y: number
+    source: string
+  } | null>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const previewPaneRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
@@ -547,34 +554,6 @@ export const NoteView: React.FC = () => {
     }
   }, [])
 
-  const rasterizeImageToPngDataUrl = useCallback((src: string): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => {
-        try {
-          const canvas = document.createElement('canvas')
-          canvas.width = img.naturalWidth || img.width
-          canvas.height = img.naturalHeight || img.height
-          if (!canvas.width || !canvas.height) {
-            reject(new Error('Invalid image dimensions'))
-            return
-          }
-          const ctx = canvas.getContext('2d')
-          if (!ctx) {
-            reject(new Error('Canvas unavailable'))
-            return
-          }
-          ctx.drawImage(img, 0, 0)
-          resolve(canvas.toDataURL('image/png'))
-        } catch (err) {
-          reject(err)
-        }
-      }
-      img.onerror = () => reject(new Error('Failed to load image'))
-      img.src = src
-    })
-  }, [])
-
   const copyImagePopup = useCallback(async () => {
     if (!imagePopupSrc) return
 
@@ -587,30 +566,9 @@ export const NoteView: React.FC = () => {
       }, 1600)
     }
 
-    const tryWrite = async (dataUrl: string) => {
-      const result = await window.electronAPI.clipboard.writeImage(dataUrl)
-      return result.success
-    }
-
-    try {
-      const isSvg = /image\/svg\+xml/i.test(imagePopupSrc) || /\.svg(\?|#|$)/i.test(imagePopupSrc)
-      if (!isSvg && (await tryWrite(imagePopupSrc))) {
-        flashState('copied')
-        return
-      }
-
-      const pngDataUrl = await rasterizeImageToPngDataUrl(imagePopupSrc)
-      if (await tryWrite(pngDataUrl)) {
-        flashState('copied')
-        return
-      }
-
-      flashState('failed')
-    } catch (err) {
-      console.error('Copy image failed:', err)
-      flashState('failed')
-    }
-  }, [imagePopupSrc, rasterizeImageToPngDataUrl])
+    const ok = await copyImageToClipboard(imagePopupSrc)
+    flashState(ok ? 'copied' : 'failed')
+  }, [imagePopupSrc])
 
   useEffect(() => {
     if (!imagePopupSrc) return
@@ -649,6 +607,7 @@ export const NoteView: React.FC = () => {
         if (src) {
           e.preventDefault()
           e.stopPropagation()
+          setImageContextMenu(null)
           setImageCopyState('idle')
           if (imageCopyResetRef.current) {
             clearTimeout(imageCopyResetRef.current)
@@ -683,8 +642,27 @@ export const NoteView: React.FC = () => {
       }
     }
 
+    const handleContextMenu = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      const img = target.closest('img') as HTMLImageElement | null
+      if (!img || !preview.contains(img)) return
+
+      const imageId = img.getAttribute('data-arknote-image-id')
+      const src = img.currentSrc || img.src
+      const source = imageId || src
+      if (!source) return
+
+      e.preventDefault()
+      e.stopPropagation()
+      setImageContextMenu({ x: e.clientX, y: e.clientY, source })
+    }
+
     preview.addEventListener('click', handleClick)
-    return () => preview.removeEventListener('click', handleClick)
+    preview.addEventListener('contextmenu', handleContextMenu)
+    return () => {
+      preview.removeEventListener('click', handleClick)
+      preview.removeEventListener('contextmenu', handleContextMenu)
+    }
   }, [openNote, showPreview])
 
   const flushCurrentNote = useCallback(async () => {
@@ -1088,6 +1066,15 @@ export const NoteView: React.FC = () => {
           </div>
         </div>,
         document.body
+      )}
+
+      {imageContextMenu && (
+        <ImageContextMenu
+          x={imageContextMenu.x}
+          y={imageContextMenu.y}
+          onCopy={() => copyArkNoteImageToClipboard(imageContextMenu.source)}
+          onClose={() => setImageContextMenu(null)}
+        />
       )}
     </div>
   )

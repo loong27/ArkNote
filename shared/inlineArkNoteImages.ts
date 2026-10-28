@@ -58,3 +58,29 @@ export function replaceArkNoteImages(
 
   return result
 }
+
+/**
+ * If `offset` falls inside an arknote markdown/HTML image on `text`, return that image id.
+ * Used for editor context-menu hit testing on a single line.
+ */
+export function findArkNoteImageAt(text: string, offset: number): string | null {
+  for (const match of text.matchAll(mdImgRegex())) {
+    const start = match.index ?? -1
+    if (start < 0) continue
+    const end = start + match[0].length
+    if (offset >= start && offset <= end && match[2]) {
+      return match[2]
+    }
+  }
+
+  for (const match of text.matchAll(htmlImgSrcRegex())) {
+    const start = match.index ?? -1
+    if (start < 0) continue
+    const end = start + match[0].length
+    if (offset >= start && offset <= end && match[2]) {
+      return match[2]
+    }
+  }
+
+  return null
+}

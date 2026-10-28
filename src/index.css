@@ -2988,6 +2988,21 @@ html, body, #root {
   z-index: 1000;
 }
 
+.image-context-menu {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: auto;
+  bottom: auto;
+  margin-top: 0;
+  min-width: 140px;
+  z-index: 1100;
+}
+
+.image-context-menu .note-menu-item.is-success {
+  color: var(--success, #34c759);
+}
+
 @keyframes menuAppear {
   from { opacity: 0; transform: translateY(-4px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }

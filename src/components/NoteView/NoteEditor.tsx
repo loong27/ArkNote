@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback } from 'react'
+import React, { useEffect, useRef, useCallback, useState } from 'react'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
@@ -7,8 +7,10 @@ import { languages } from '@codemirror/language-data'
 import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { useStore } from '../../store/useStore'
 import { useI18n } from '../../i18n/I18nProvider'
-import { hasArkNoteImages } from '../../../shared/inlineArkNoteImages'
+import { findArkNoteImageAt, hasArkNoteImages } from '../../../shared/inlineArkNoteImages'
+import { copyArkNoteImageToClipboard } from '../../utils/copyImage'
 import { createEditorSearchPanel, editorSearchPhrases, openReplacePanel } from './editorSearchPanel'
+import { ImageContextMenu } from './ImageContextMenu'
 
 async function writeClipboardText(text: string): Promise<boolean> {
   try {
@@ -82,6 +84,13 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
   const viewRef = useRef<EditorView | null>(null)
   const currentNote = useStore(s => s.currentNote)
   const theme = useStore(s => s.theme)
+  const [imageContextMenu, setImageContextMenu] = useState<{
+    x: number
+    y: number
+    imageId: string
+  } | null>(null)
+  const openImageContextMenuRef = useRef(setImageContextMenu)
+  openImageContextMenuRef.current = setImageContextMenu
 
   // Handle image paste
   const handlePaste = useCallback(async (event: ClipboardEvent, view: EditorView) => {
@@ -233,6 +242,22 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
           },
           copy: (event, view) => handleCopyOrCut(event, view, false),
           cut: (event, view) => handleCopyOrCut(event, view, true),
+          contextmenu: (event, view) => {
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
+            if (pos == null) return false
+
+            const line = view.state.doc.lineAt(pos)
+            const imageId = findArkNoteImageAt(line.text, pos - line.from)
+            if (!imageId) return false
+
+            event.preventDefault()
+            openImageContextMenuRef.current({
+              x: event.clientX,
+              y: event.clientY,
+              imageId,
+            })
+            return true
+          },
         }),
         EditorView.theme({
           '&': {
@@ -287,5 +312,17 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
     }
   }, [content])
 
-  return <div ref={containerRef} className="editor-container" />
+  return (
+    <>
+      <div ref={containerRef} className="editor-container" />
+      {imageContextMenu && (
+        <ImageContextMenu
+          x={imageContextMenu.x}
+          y={imageContextMenu.y}
+          onCopy={() => copyArkNoteImageToClipboard(imageContextMenu.imageId)}
+          onClose={() => setImageContextMenu(null)}
+        />
+      )}
+    </>
+  )
 }
