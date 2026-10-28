@@ -255,11 +255,13 @@ export interface ElectronAPI {
   images: {
     save: (noteId: string, imageData: string, fileName: string) => Promise<string>
     get: (imageId: string) => Promise<string>
+    inlineInMarkdown: (content: string) => Promise<string>
     selectAndSave: (noteId: string) => Promise<string | null>
   }
   // Clipboard
   clipboard: {
     writeImage: (dataUrl: string) => Promise<{ success: boolean; message?: string }>
+    writeText: (text: string) => Promise<{ success: boolean; message?: string }>
   }
   // Sync
   sync: {

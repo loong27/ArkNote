@@ -18,6 +18,7 @@ import { NoteMenu } from './NoteMenu'
 import { NoteTagBar } from './NoteTagBar'
 import { SearchInNote } from './SearchInNote'
 import { EditorToolbar } from './EditorToolbar'
+import { BackToTopButton } from './BackToTopButton'
 import type { SearchMatch } from '../../types'
 import { EditorView } from '@codemirror/view'
 import { migrateLegacyBrandReferences } from '../../../shared/brand'
@@ -1035,6 +1036,11 @@ export const NoteView: React.FC = () => {
             />
           </div>
         )}
+        <BackToTopButton
+          scrollRef={previewPaneRef}
+          enabled={showPreview}
+          resetKey={currentNote.id}
+        />
       </div>
 
       {imagePopupSrc && ReactDOM.createPortal(

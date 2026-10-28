@@ -73,11 +73,14 @@ const api: ElectronAPI = {
     save: (noteId: string, imageData: string, fileName: string) =>
       ipcRenderer.invoke('images:save', noteId, imageData, fileName),
     get: (imageId: string) => ipcRenderer.invoke('images:get', imageId),
+    inlineInMarkdown: (content: string) =>
+      ipcRenderer.invoke('images:inlineInMarkdown', content),
     selectAndSave: (noteId: string) =>
       ipcRenderer.invoke('images:selectAndSave', noteId),
   },
   clipboard: {
     writeImage: (dataUrl: string) => ipcRenderer.invoke('clipboard:writeImage', dataUrl),
+    writeText: (text: string) => ipcRenderer.invoke('clipboard:writeText', text),
   },
   sync: {
     configure: (config) => ipcRenderer.invoke('sync:configure', config),

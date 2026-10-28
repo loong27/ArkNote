@@ -7,7 +7,26 @@ import { languages } from '@codemirror/language-data'
 import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { useStore } from '../../store/useStore'
 import { useI18n } from '../../i18n/I18nProvider'
+import { hasArkNoteImages } from '../../../shared/inlineArkNoteImages'
 import { createEditorSearchPanel, editorSearchPhrases, openReplacePanel } from './editorSearchPanel'
+
+async function writeClipboardText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text)
+      return true
+    }
+  } catch {
+    // Fall through to Electron clipboard IPC
+  }
+  try {
+    const result = await window.electronAPI.clipboard.writeText(text)
+    return !!result?.success
+  } catch (error) {
+    console.error('Failed to write clipboard text:', error)
+    return false
+  }
+}
 
 const darkTheme = EditorView.theme({
   '&': { backgroundColor: '#252932', color: '#f4f7fb' },
@@ -106,6 +125,40 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
     return false
   }, [currentNote])
 
+  // Copy/cut: convert arknote:// images in selection to external data URLs
+  const handleCopyOrCut = useCallback((event: ClipboardEvent, view: EditorView, isCut: boolean) => {
+    const { from, to } = view.state.selection.main
+    if (from === to) return false
+
+    const selected = view.state.sliceDoc(from, to)
+    if (!hasArkNoteImages(selected)) return false
+
+    event.preventDefault()
+
+    void (async () => {
+      try {
+        const inlined = await window.electronAPI.images.inlineInMarkdown(selected)
+        const ok = await writeClipboardText(inlined)
+        if (!ok) return
+
+        if (isCut && viewRef.current === view) {
+          const docLen = view.state.doc.length
+          if (from <= docLen && to <= docLen) {
+            view.dispatch({
+              changes: { from, to, insert: '' },
+              selection: { anchor: from },
+              userEvent: 'delete.cut',
+            })
+          }
+        }
+      } catch (error) {
+        console.error(`Failed to ${isCut ? 'cut' : 'copy'} with inlined images:`, error)
+      }
+    })()
+
+    return true
+  }, [])
+
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -178,6 +231,8 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
             handlePaste(event, view)
             return false
           },
+          copy: (event, view) => handleCopyOrCut(event, view, false),
+          cut: (event, view) => handleCopyOrCut(event, view, true),
         }),
         EditorView.theme({
           '&': {

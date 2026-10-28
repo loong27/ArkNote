@@ -15,6 +15,10 @@ import { ImportService } from '../services/importService'
 import { AppConfig } from '../services/appConfig'
 import { VaultRestoreService } from '../services/vaultRestoreService'
 import { migrateLegacyBrandReferences } from '../../shared/brand'
+import {
+  collectArkNoteImageIds,
+  replaceArkNoteImages,
+} from '../../shared/inlineArkNoteImages'
 import { translate } from '../../shared/i18n'
 import {
   AuthAttemptLimiter,
@@ -404,40 +408,31 @@ export function registerIpcHandlers(
     },
   )
 
-  // Helper: export a single note MD with images to a target directory
-  const exportNoteWithImages = (noteId: string, targetDir: string) => {
-    const note = noteService.get(noteId)
-    let content = migrateLegacyBrandReferences(note.content)
+  /** Resolve arknote:// image refs in markdown to data URLs for external use. */
+  const inlineImagesAsBase64 = (content: string): string => {
+    const migrated = migrateLegacyBrandReferences(content)
+    const imageIds = collectArkNoteImageIds(migrated)
+    if (imageIds.length === 0) return migrated
 
-    // Find all arkNote image references.
-    const imageRegex = /!\[([^\]]*)\]\(arknote:\/\/([^)]+)\)/g
-    const matches = [...content.matchAll(imageRegex)]
-
-    if (matches.length > 0) {
-      const imagesDir = path.join(targetDir, 'images')
-      if (!fs.existsSync(imagesDir)) {
-        fs.mkdirSync(imagesDir, { recursive: true })
-      }
-
-      for (const match of matches) {
-        const imageId = match[2]
-        try {
-          const imageData = fileManager.readImage(imageId)
-          if (imageData) {
-            const files = fs.readdirSync(fileManager.imagesDir)
-            const imageFile = files.find(f => f.startsWith(imageId))
-            const ext = imageFile
-              ? imageFile.replace(imageId, '').replace('.enc', '')
-              : '.png'
-            const imageFileName = `${imageId}${ext}`
-            fs.writeFileSync(path.join(imagesDir, imageFileName), imageData)
-            content = content.replace(match[0], `![${match[1]}](./images/${imageFileName})`)
-          }
-        } catch (err) {
-          console.error(`Failed to export image ${imageId}:`, err)
-        }
+    const idToDataUrl = new Map<string, string>()
+    for (const imageId of imageIds) {
+      try {
+        const imageData = fileManager.readImage(imageId)
+        if (!imageData) continue
+        const mimeType = fileManager.getImageMimeType(imageId)
+        idToDataUrl.set(imageId, `data:${mimeType};base64,${imageData.toString('base64')}`)
+      } catch (err) {
+        console.error(`Failed to inline image ${imageId}:`, err)
       }
     }
+
+    return replaceArkNoteImages(migrated, idToDataUrl)
+  }
+
+  // Helper: export a single note as a self-contained .md (images as Base64 data URLs)
+  const exportNoteWithImages = (noteId: string, targetDir: string) => {
+    const note = noteService.get(noteId)
+    const content = inlineImagesAsBase64(note.content)
 
     const safeName = note.metadata.title.replace(/[<>:"/\\|?*]/g, '_')
     const mdPath = path.join(targetDir, `${safeName}.md`)
@@ -456,8 +451,8 @@ export function registerIpcHandlers(
     })
 
     if (!result.canceled && result.filePath) {
-      const targetDir = path.dirname(result.filePath)
-      exportNoteWithImages(id, targetDir)
+      const content = inlineImagesAsBase64(note.content)
+      fs.writeFileSync(result.filePath, content, 'utf-8')
     }
   })
 
@@ -645,6 +640,11 @@ export function registerIpcHandlers(
     return `data:${mimeType};base64,${imageData.toString('base64')}`
   })
 
+  ipcMain.handle('images:inlineInMarkdown', async (_event, content: string) => {
+    if (typeof content !== 'string') return ''
+    return inlineImagesAsBase64(content)
+  })
+
   ipcMain.handle('images:selectAndSave', async (_event, _noteId: string) => {
     const win = BrowserWindow.getFocusedWindow()
     if (!win) return null
@@ -679,6 +679,19 @@ export function registerIpcHandlers(
         return { success: false, message: 'Empty image' }
       }
       clipboard.writeImage(image)
+      return { success: true }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      return { success: false, message }
+    }
+  })
+
+  ipcMain.handle('clipboard:writeText', async (_event, text: string) => {
+    if (typeof text !== 'string') {
+      return { success: false, message: 'Invalid text' }
+    }
+    try {
+      clipboard.writeText(text)
       return { success: true }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)

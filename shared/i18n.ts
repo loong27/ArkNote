@@ -164,6 +164,7 @@ const EN_TRANSLATIONS: Record<string, string> = {
   '编辑': 'Edit',
   '分栏': 'Split',
   '预览': 'Preview',
+  '返回顶部': 'Back to top',
   '关闭原图预览': 'Close image preview',
   '原图预览': 'Full-size image preview',
   '复制图片': 'Copy image',
