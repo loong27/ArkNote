@@ -3467,15 +3467,17 @@ html, body, #root {
    SHARE IMAGE DIALOG — long image export preview
    ================================================================ */
 .share-image-dialog {
-  width: min(560px, 92vw);
-  max-height: min(86vh, 900px);
+  width: min(420px, 92vw);
+  max-height: min(88vh, 920px);
 }
 
 .share-image-dialog-body {
-  min-height: 220px;
-  max-height: min(62vh, 640px);
+  min-height: 260px;
+  max-height: min(68vh, 720px);
   display: flex;
   flex-direction: column;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .share-image-status {
@@ -3504,22 +3506,27 @@ html, body, #root {
 }
 
 .share-image-preview-wrap {
-  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   border-radius: var(--radius-md, 10px);
   background: #ebe7e0;
   border: 0.5px solid var(--border-light);
-  padding: 16px;
+  padding: 20px 16px;
   display: flex;
   justify-content: center;
+  align-items: flex-start;
+  -webkit-overflow-scrolling: touch;
 }
 
 .share-image-preview {
   display: block;
   width: 100%;
-  max-width: 420px;
+  max-width: 360px;
   height: auto;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
   background: #faf8f5;
 }
 

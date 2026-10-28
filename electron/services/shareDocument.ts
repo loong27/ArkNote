@@ -50,10 +50,20 @@ export function getBrandLogoDataUrl(): string {
 
 const SHARE_STYLES = `
   * { box-sizing: border-box; }
+  * {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  *::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
   html, body {
     margin: 0;
     padding: 0;
     background: #f3f1ec;
+    overflow: hidden !important;
   }
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
@@ -66,6 +76,7 @@ const SHARE_STYLES = `
     background: #faf8f5;
     margin: 0 auto;
     padding: 48px 44px 36px;
+    overflow: hidden !important;
   }
   .share-title {
     font-size: 28px;
@@ -75,9 +86,13 @@ const SHARE_STYLES = `
     margin: 0 0 28px;
     letter-spacing: -0.02em;
     word-break: break-word;
+    overflow-wrap: anywhere;
   }
   .share-body {
     word-break: break-word;
+    overflow-wrap: anywhere;
+    overflow: hidden !important;
+    max-width: 100%;
   }
   .share-body > :first-child { margin-top: 0; }
   .share-body > :last-child { margin-bottom: 0; }
@@ -92,21 +107,32 @@ const SHARE_STYLES = `
     border-radius: 4px;
     font-family: 'Fira Code', 'Consolas', 'SF Mono', monospace;
     font-size: 0.9em;
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
   pre {
     background: #efece6;
     padding: 16px;
     border-radius: 8px;
-    overflow-x: auto;
+    overflow: hidden !important;
+    max-width: 100%;
+    white-space: pre-wrap;
+    word-break: break-word;
     border: 1px solid #e0dcd4;
   }
-  pre code { background: none; padding: 0; }
+  pre code {
+    background: none;
+    padding: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
   .md-code-block {
     margin: 1em 0;
     border-radius: 8px;
     border: 1px solid #e0dcd4;
     background: #efece6;
-    overflow: hidden;
+    overflow: hidden !important;
+    max-width: 100%;
   }
   .md-code-header {
     display: flex;
@@ -124,6 +150,7 @@ const SHARE_STYLES = `
     border: 0;
     border-radius: 0;
     background: transparent;
+    overflow: hidden !important;
   }
   .md-code-block .hljs-keyword,
   .md-code-block .hljs-selector-tag,
@@ -158,20 +185,33 @@ const SHARE_STYLES = `
   table {
     border-collapse: collapse;
     width: 100%;
+    max-width: 100%;
     margin: 1em 0;
+    table-layout: fixed;
+    overflow: hidden !important;
   }
   th, td {
     border: 1px solid #ddd;
     padding: 8px 12px;
     text-align: left;
+    word-break: break-word;
+    overflow-wrap: anywhere;
   }
   th { background: #efece6; font-weight: 600; }
-  img { max-width: 100%; height: auto; border-radius: 6px; }
-  .mermaid-container { margin: 1.2em 0; overflow-x: auto; }
+  img, svg {
+    max-width: 100% !important;
+    height: auto !important;
+    border-radius: 6px;
+  }
+  .mermaid-container {
+    margin: 1.2em 0;
+    overflow: hidden !important;
+    max-width: 100%;
+  }
   .mermaid-container svg { max-width: 100%; height: auto; }
   ul, ol { padding-left: 2em; margin: 0 0 1em; }
   li { margin-bottom: 0.3em; }
-  a { color: #3b7ddd; text-decoration: none; }
+  a { color: #3b7ddd; text-decoration: none; word-break: break-word; }
   hr { border: none; border-top: 1px solid #e5e1d8; margin: 2em 0; }
   .task-list-item { list-style: none; }
   .task-list-item input { margin-right: 0.4em; }
