@@ -54,6 +54,53 @@ export class PdfService {
       border: 1px solid #e0e0e0;
     }
     pre code { background: none; padding: 0; }
+    .md-code-block {
+      margin: 1em 0;
+      border-radius: 6px;
+      border: 1px solid #e0e0e0;
+      background: #f5f5f5;
+      overflow: hidden;
+    }
+    .md-code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 12px;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 12px;
+      color: #666;
+      font-family: 'Fira Code', 'Consolas', monospace;
+    }
+    .md-code-copy { display: none !important; }
+    .md-code-block pre {
+      margin: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .md-code-block .hljs-keyword,
+    .md-code-block .hljs-selector-tag,
+    .md-code-block .hljs-subst { color: #7c3aed; }
+    .md-code-block .hljs-string,
+    .md-code-block .hljs-doctag,
+    .md-code-block .hljs-regexp { color: #16a34a; }
+    .md-code-block .hljs-comment,
+    .md-code-block .hljs-quote { color: #94a3b8; font-style: italic; }
+    .md-code-block .hljs-number,
+    .md-code-block .hljs-literal { color: #ea580c; }
+    .md-code-block .hljs-title,
+    .md-code-block .hljs-section,
+    .md-code-block .hljs-title.function_ { color: #2563eb; }
+    .md-code-block .hljs-type,
+    .md-code-block .hljs-class .hljs-title,
+    .md-code-block .hljs-title.class_ { color: #ca8a04; }
+    .md-code-block .hljs-attr,
+    .md-code-block .hljs-attribute,
+    .md-code-block .hljs-name { color: #ca8a04; }
+    .md-code-block .hljs-built_in,
+    .md-code-block .hljs-builtin-name { color: #0891b2; }
+    .md-code-block .hljs-meta { color: #94a3b8; }
+    .md-code-block .hljs-tag { color: #2563eb; }
     blockquote {
       border-left: 4px solid #4a9eff;
       margin: 1em 0;

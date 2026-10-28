@@ -1,16 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
 import { Columns2, Edit3, Eye, Save, ChevronRight, X, Copy, Check } from 'lucide-react'
-import MarkdownIt from 'markdown-it'
 import DOMPurify from 'dompurify'
-import abbr from 'markdown-it-abbr'
-import deflist from 'markdown-it-deflist'
-import footnote from 'markdown-it-footnote'
-import ins from 'markdown-it-ins'
-import mark from 'markdown-it-mark'
-import sub from 'markdown-it-sub'
-import sup from 'markdown-it-sup'
-import taskLists from 'markdown-it-task-lists'
 import mermaid from 'mermaid'
 import { useStore } from '../../store/useStore'
 import { NoteEditor } from './NoteEditor'
@@ -24,28 +15,10 @@ import { EditorView } from '@codemirror/view'
 import { migrateLegacyBrandReferences } from '../../../shared/brand'
 import { useI18n } from '../../i18n/I18nProvider'
 import { copyArkNoteImageToClipboard, copyImageToClipboard } from '../../utils/copyImage'
+import { writeClipboardText } from '../../utils/clipboard'
+import { getLanguageLabel } from '../../utils/codeLanguages'
+import { renderMarkdown } from '../../utils/markdownRenderer'
 import { ImageContextMenu } from './ImageContextMenu'
-
-// Initialize markdown-it with HTML support + task lists
-const md = new MarkdownIt({
-  html: true,
-  linkify: true,
-  typographer: true,
-  breaks: true,
-})
-
-md
-  .use(taskLists, { enabled: true, label: true, labelAfter: true })
-  .use(footnote)
-  .use(sub)
-  .use(sup)
-  .use(ins)
-  .use(mark)
-  .use(abbr)
-  .use(deflist)
-
-md.renderer.rules.table_open = () => '<div class="markdown-table-wrap"><table>\n'
-md.renderer.rules.table_close = () => '</table></div>\n'
 
 // Initialize mermaid
 mermaid.initialize({
@@ -139,7 +112,10 @@ function setLeadingMarkdownTitle(markdown: string, noteTitle: string, untitled: 
 function sanitizeRenderedHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     ADD_TAGS: ['details', 'summary'],
-    ADD_ATTR: ['target', 'rel', 'class', 'data-note-id', 'checked', 'width', 'height', 'data-arknote-image-id', 'data-arknote-width', 'data-arknote-height'],
+    ADD_ATTR: [
+      'target', 'rel', 'class', 'data-note-id', 'checked', 'width', 'height',
+      'data-arknote-image-id', 'data-arknote-width', 'data-arknote-height', 'data-lang',
+    ],
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|data:image\/|arknote:\/\/|arknote-link:\/\/|#)/i,
   })
 }
@@ -387,7 +363,7 @@ export const NoteView: React.FC = () => {
         })
 
         if (cancelled) return
-        const html = md.render(processedContent)
+        const html = renderMarkdown(processedContent)
         cachePreviewHtml(cacheKey, html)
         setRenderedHtml(html)
       }
@@ -489,6 +465,41 @@ export const NoteView: React.FC = () => {
       }
     }
   }, [renderedHtml, searchHighlights, currentSearchIndex, showPreview, noteSearchVisible, noteSearchQuery])
+
+  // Localize plain-text labels and attach copy buttons to fenced code blocks
+  useEffect(() => {
+    if (!previewRef.current || !showPreview) return
+
+    const blocks = previewRef.current.querySelectorAll('.md-code-block')
+    for (const block of Array.from(blocks)) {
+      const lang = block.getAttribute('data-lang') || ''
+      const langEl = block.querySelector('.md-code-lang')
+      if (langEl && (!lang || lang === 'plain')) {
+        langEl.textContent = t('纯文本')
+      }
+
+      let header = block.querySelector('.md-code-header')
+      if (!header) {
+        header = document.createElement('div')
+        header.className = 'md-code-header'
+        const label = document.createElement('span')
+        label.className = 'md-code-lang'
+        label.textContent = !lang || lang === 'plain' ? t('纯文本') : getLanguageLabel(lang)
+        header.appendChild(label)
+        block.insertBefore(header, block.firstChild)
+      }
+
+      if (header.querySelector('[data-code-copy]')) continue
+
+      const copyBtn = document.createElement('button')
+      copyBtn.type = 'button'
+      copyBtn.className = 'md-code-copy'
+      copyBtn.setAttribute('data-code-copy', '1')
+      copyBtn.setAttribute('aria-label', t('复制代码'))
+      copyBtn.textContent = t('复制代码')
+      header.appendChild(copyBtn)
+    }
+  }, [renderedHtml, showPreview, t])
 
   // Render mermaid diagrams after HTML is set
   useEffect(() => {
@@ -594,13 +605,34 @@ export const NoteView: React.FC = () => {
     }
   }, [])
 
-  // Handle clicking preview content: image popup + internal note links + external URLs
+  // Handle clicking preview content: code copy + image popup + internal note links + external URLs
   useEffect(() => {
     const preview = previewRef.current
     if (!preview) return
 
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement
+
+      const copyBtn = target.closest('[data-code-copy]') as HTMLButtonElement | null
+      if (copyBtn && preview.contains(copyBtn)) {
+        e.preventDefault()
+        e.stopPropagation()
+        const block = copyBtn.closest('.md-code-block')
+        const codeEl = block?.querySelector('pre code')
+        const text = codeEl?.textContent ?? ''
+        void (async () => {
+          const ok = await writeClipboardText(text)
+          const prev = copyBtn.textContent
+          copyBtn.textContent = ok ? t('已复制') : t('复制失败')
+          copyBtn.classList.toggle('is-success', ok)
+          window.setTimeout(() => {
+            copyBtn.textContent = prev || t('复制代码')
+            copyBtn.classList.remove('is-success')
+          }, 1600)
+        })()
+        return
+      }
+
       const img = target.closest('img') as HTMLImageElement | null
       if (img && preview.contains(img)) {
         const src = img.currentSrc || img.src
@@ -663,7 +695,7 @@ export const NoteView: React.FC = () => {
       preview.removeEventListener('click', handleClick)
       preview.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [openNote, showPreview])
+  }, [openNote, showPreview, t])
 
   const flushCurrentNote = useCallback(async () => {
     if (!currentNote || isTrashNote) return

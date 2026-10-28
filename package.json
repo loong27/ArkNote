@@ -21,8 +21,9 @@
     "test:i18n": "node scripts/test-i18n.mjs",
     "test:sync": "node scripts/test-sync-service.mjs",
     "test:markdown": "node scripts/test-markdown-renderer.mjs",
+    "test:html-to-markdown": "node scripts/test-html-to-markdown.mjs",
     "test:website": "node scripts/test-website.mjs",
-    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:restore && npm run test:updater && npm run test:i18n && npm run test:sync && npm run test:markdown && npm run test:website && vite build",
+    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:restore && npm run test:updater && npm run test:i18n && npm run test:sync && npm run test:markdown && npm run test:html-to-markdown && npm run test:website && vite build",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win nsis --x64 --ia32",
     "package:mac": "npm run build && electron-builder --mac",
@@ -31,6 +32,7 @@
   "dependencies": {
     "@codemirror/commands": "^6.7.1",
     "@codemirror/lang-markdown": "^6.3.1",
+    "@codemirror/language": "^6.13.1",
     "@codemirror/language-data": "^6.5.1",
     "@codemirror/search": "^6.5.8",
     "@codemirror/state": "^6.5.0",
@@ -42,6 +44,7 @@
     "dompurify": "^3.4.8",
     "electron-updater": "^6.8.9",
     "harmonyos-sans-sc-webfont-splitted": "^1.1.0",
+    "highlight.js": "^11.12.0",
     "lucide-react": "^0.468.0",
     "markdown-it": "^14.1.0",
     "markdown-it-abbr": "^2.0.0",
@@ -57,6 +60,8 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "simple-git": "^3.27.0",
+    "turndown": "^7.2.4",
+    "turndown-plugin-gfm": "^1.0.2",
     "zustand": "^5.0.2"
   },
   "devDependencies": {
@@ -64,6 +69,7 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/turndown": "^5.0.6",
     "@vitejs/plugin-react": "^4.3.4",
     "electron": "^33.2.0",
     "electron-builder": "^25.1.8",

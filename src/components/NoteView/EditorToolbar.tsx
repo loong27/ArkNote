@@ -38,6 +38,7 @@ import {
 import { EditorView } from '@codemirror/view'
 import { useStore } from '../../store/useStore'
 import { useI18n } from '../../i18n/I18nProvider'
+import { TOOLBAR_CODE_LANGUAGES, fenceLanguageAttr } from '../../utils/codeLanguages'
 
 interface Props {
   editorViewRef: React.RefObject<EditorView | null>
@@ -45,7 +46,7 @@ interface Props {
   rightActions?: React.ReactNode
 }
 
-type DropdownName = 'heading' | 'color' | 'table' | 'emoji' | 'note-link' | null
+type DropdownName = 'heading' | 'color' | 'table' | 'emoji' | 'note-link' | 'code' | null
 
 interface ToolbarPopoverProps {
   anchorRef: React.RefObject<HTMLButtonElement | null>
@@ -160,6 +161,7 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
   const [noteLinkSearch, setNoteLinkSearch] = useState('')
 
   const headingButtonRef = useRef<HTMLButtonElement>(null)
+  const codeButtonRef = useRef<HTMLButtonElement>(null)
   const colorButtonRef = useRef<HTMLButtonElement>(null)
   const tableButtonRef = useRef<HTMLButtonElement>(null)
   const emojiButtonRef = useRef<HTMLButtonElement>(null)
@@ -266,13 +268,16 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
   const handleOrderedList = () => toggleLinePrefix(/^\s*\d+[.)]\s+/, (index) => `${index + 1}. `, t('列表项'))
   const handleTaskList = () => toggleLinePrefix(/^\s*[-+*]\s+\[[ xX]\]\s+/, () => '- [ ] ', t('任务项'))
 
-  const handleCodeBlock = () => {
+  const handleCodeBlock = (langId: string) => {
     const selection = getSelection()
     if (!selection) return
     const text = selection.text || t('代码')
-    const block = `\n\n\`\`\`\n${text}\n\`\`\`\n\n`
+    const fenceLang = fenceLanguageAttr(langId)
+    const info = fenceLang ? fenceLang : ''
+    const block = `\n\n\`\`\`${info}\n${text}\n\`\`\`\n\n`
     const start = block.indexOf(text)
     replaceSelection(block, start, start + text.length)
+    setActiveDropdown(null)
   }
 
   const handleLink = () => {
@@ -386,9 +391,9 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
           <CommandButton title={t('引用')} onClick={handleBlockquote}>
             <Quote size={16} strokeWidth={1.5} />
           </CommandButton>
-          <CommandButton title={t('代码块')} onClick={handleCodeBlock}>
+          <button ref={codeButtonRef} {...dropdownButtonProps('code')} title={t('代码块')}>
             <CodeXml size={16} strokeWidth={1.5} />
-          </CommandButton>
+          </button>
         </div>
 
         <div className="toolbar-divider" />
@@ -471,6 +476,24 @@ export const EditorToolbar: React.FC<Props> = ({ editorViewRef, onImageUpload, r
             <Braces size={15} strokeWidth={1.5} />
             <span>{t('正文')}</span>
           </button>
+        </ToolbarPopover>
+      )}
+
+      {activeDropdown === 'code' && (
+        <ToolbarPopover anchorRef={codeButtonRef} className="code-lang-picker-dropdown">
+          <div className="code-lang-picker-label">{t('选择语言')}</div>
+          <div className="code-lang-grid">
+            {TOOLBAR_CODE_LANGUAGES.map((lang) => (
+              <button
+                key={lang.id}
+                type="button"
+                className="code-lang-item"
+                onClick={() => handleCodeBlock(lang.id)}
+              >
+                {lang.id === 'plain' ? t('纯文本') : lang.label}
+              </button>
+            ))}
+          </div>
         </ToolbarPopover>
       )}
 

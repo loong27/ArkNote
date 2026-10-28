@@ -4,31 +4,106 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLi
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
+import { tags as t } from '@lezer/highlight'
 import { search, searchKeymap, highlightSelectionMatches } from '@codemirror/search'
 import { useStore } from '../../store/useStore'
 import { useI18n } from '../../i18n/I18nProvider'
 import { findArkNoteImageAt, hasArkNoteImages } from '../../../shared/inlineArkNoteImages'
 import { copyArkNoteImageToClipboard } from '../../utils/copyImage'
+import { writeClipboardText } from '../../utils/clipboard'
+import { htmlToMarkdown } from '../../utils/htmlToMarkdown'
+import { getPasteConvertCandidate } from '../../utils/pasteDetect'
 import { createEditorSearchPanel, editorSearchPhrases, openReplacePanel } from './editorSearchPanel'
 import { ImageContextMenu } from './ImageContextMenu'
+import { PasteConvertNotice } from './PasteConvertNotice'
 
-async function writeClipboardText(text: string): Promise<boolean> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text)
-      return true
-    }
-  } catch {
-    // Fall through to Electron clipboard IPC
-  }
-  try {
-    const result = await window.electronAPI.clipboard.writeText(text)
-    return !!result?.success
-  } catch (error) {
-    console.error('Failed to write clipboard text:', error)
-    return false
-  }
+interface PasteConvertOffer {
+  from: number
+  to: number
+  plain: string
+  html: string
 }
+
+const darkHighlightStyle = HighlightStyle.define([
+  { tag: t.heading, color: '#89b4fa', fontWeight: '600' },
+  { tag: t.strong, fontWeight: '700' },
+  { tag: t.emphasis, fontStyle: 'italic' },
+  { tag: t.strikethrough, textDecoration: 'line-through' },
+  { tag: t.link, color: '#89b4fa' },
+  { tag: t.url, color: '#89dceb' },
+  { tag: t.processingInstruction, color: '#6c7086' },
+  { tag: t.monospace, color: '#f9e2af' },
+  { tag: t.comment, color: '#6c7086', fontStyle: 'italic' },
+  { tag: t.lineComment, color: '#6c7086', fontStyle: 'italic' },
+  { tag: t.blockComment, color: '#6c7086', fontStyle: 'italic' },
+  { tag: t.keyword, color: '#cba6f7' },
+  { tag: t.controlKeyword, color: '#cba6f7' },
+  { tag: t.operatorKeyword, color: '#cba6f7' },
+  { tag: t.definitionKeyword, color: '#cba6f7' },
+  { tag: t.moduleKeyword, color: '#cba6f7' },
+  { tag: t.string, color: '#a6e3a1' },
+  { tag: t.special(t.string), color: '#a6e3a1' },
+  { tag: t.number, color: '#fab387' },
+  { tag: t.bool, color: '#fab387' },
+  { tag: t.null, color: '#fab387' },
+  { tag: t.regexp, color: '#f5c2e7' },
+  { tag: t.variableName, color: '#cdd6f4' },
+  { tag: t.definition(t.variableName), color: '#89b4fa' },
+  { tag: t.function(t.variableName), color: '#89b4fa' },
+  { tag: t.propertyName, color: '#89b4fa' },
+  { tag: t.typeName, color: '#f9e2af' },
+  { tag: t.className, color: '#f9e2af' },
+  { tag: t.namespace, color: '#f9e2af' },
+  { tag: t.attributeName, color: '#f9e2af' },
+  { tag: t.tagName, color: '#89b4fa' },
+  { tag: t.angleBracket, color: '#7f849c' },
+  { tag: t.operator, color: '#89dceb' },
+  { tag: t.punctuation, color: '#a6adc8' },
+  { tag: t.bracket, color: '#a6adc8' },
+  { tag: t.meta, color: '#6c7086' },
+  { tag: t.invalid, color: '#f38ba8' },
+])
+
+const lightHighlightStyle = HighlightStyle.define([
+  { tag: t.heading, color: '#2563eb', fontWeight: '600' },
+  { tag: t.strong, fontWeight: '700' },
+  { tag: t.emphasis, fontStyle: 'italic' },
+  { tag: t.strikethrough, textDecoration: 'line-through' },
+  { tag: t.link, color: '#2563eb' },
+  { tag: t.url, color: '#0891b2' },
+  { tag: t.processingInstruction, color: '#94a3b8' },
+  { tag: t.monospace, color: '#b45309' },
+  { tag: t.comment, color: '#94a3b8', fontStyle: 'italic' },
+  { tag: t.lineComment, color: '#94a3b8', fontStyle: 'italic' },
+  { tag: t.blockComment, color: '#94a3b8', fontStyle: 'italic' },
+  { tag: t.keyword, color: '#7c3aed' },
+  { tag: t.controlKeyword, color: '#7c3aed' },
+  { tag: t.operatorKeyword, color: '#7c3aed' },
+  { tag: t.definitionKeyword, color: '#7c3aed' },
+  { tag: t.moduleKeyword, color: '#7c3aed' },
+  { tag: t.string, color: '#16a34a' },
+  { tag: t.special(t.string), color: '#16a34a' },
+  { tag: t.number, color: '#ea580c' },
+  { tag: t.bool, color: '#ea580c' },
+  { tag: t.null, color: '#ea580c' },
+  { tag: t.regexp, color: '#db2777' },
+  { tag: t.variableName, color: '#1e293b' },
+  { tag: t.definition(t.variableName), color: '#2563eb' },
+  { tag: t.function(t.variableName), color: '#2563eb' },
+  { tag: t.propertyName, color: '#2563eb' },
+  { tag: t.typeName, color: '#ca8a04' },
+  { tag: t.className, color: '#ca8a04' },
+  { tag: t.namespace, color: '#ca8a04' },
+  { tag: t.attributeName, color: '#ca8a04' },
+  { tag: t.tagName, color: '#2563eb' },
+  { tag: t.angleBracket, color: '#94a3b8' },
+  { tag: t.operator, color: '#0891b2' },
+  { tag: t.punctuation, color: '#64748b' },
+  { tag: t.bracket, color: '#64748b' },
+  { tag: t.meta, color: '#94a3b8' },
+  { tag: t.invalid, color: '#dc2626' },
+])
 
 const darkTheme = EditorView.theme({
   '&': { backgroundColor: '#252932', color: '#f4f7fb' },
@@ -92,47 +167,107 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
   const openImageContextMenuRef = useRef(setImageContextMenu)
   openImageContextMenuRef.current = setImageContextMenu
 
-  // Handle image paste
-  const handlePaste = useCallback(async (event: ClipboardEvent, view: EditorView) => {
+  const [pasteConvertOffer, setPasteConvertOffer] = useState<PasteConvertOffer | null>(null)
+  const pasteConvertOfferRef = useRef<PasteConvertOffer | null>(null)
+  pasteConvertOfferRef.current = pasteConvertOffer
+
+  const dismissPasteConvertOffer = useCallback(() => {
+    pasteConvertOfferRef.current = null
+    setPasteConvertOffer(null)
+  }, [])
+
+  const handleConvertPaste = useCallback(() => {
+    const offer = pasteConvertOfferRef.current
+    const view = viewRef.current
+    if (!offer || !view) {
+      dismissPasteConvertOffer()
+      return
+    }
+
+    const { from, to, plain, html } = offer
+    const docLen = view.state.doc.length
+    if (from < 0 || to < from || to > docLen || view.state.sliceDoc(from, to) !== plain) {
+      dismissPasteConvertOffer()
+      return
+    }
+
+    const md = htmlToMarkdown(html)
+    if (!md) {
+      dismissPasteConvertOffer()
+      return
+    }
+
+    view.dispatch({
+      changes: { from, to, insert: md },
+      selection: { anchor: from + md.length },
+      userEvent: 'input',
+    })
+    dismissPasteConvertOffer()
+  }, [dismissPasteConvertOffer])
+
+  // Handle image paste + rich HTML → Markdown offer
+  const handlePaste = useCallback((event: ClipboardEvent, view: EditorView): boolean => {
     const items = event.clipboardData?.items
-    if (!items) return false
+    if (items) {
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          event.preventDefault()
+          dismissPasteConvertOffer()
 
-    for (const item of Array.from(items)) {
-      if (item.type.startsWith('image/')) {
-        event.preventDefault()
+          const file = item.getAsFile()
+          if (!file || !currentNote) return true
 
-        const file = item.getAsFile()
-        if (!file || !currentNote) return true
+          try {
+            const reader = new FileReader()
+            reader.onload = async () => {
+              const base64 = (reader.result as string).split(',')[1]
+              const imageId = await window.electronAPI.images.save(
+                currentNote.id,
+                base64,
+                file.name || 'paste.png'
+              )
 
-        try {
-          // Read file as base64
-          const reader = new FileReader()
-          reader.onload = async () => {
-            const base64 = (reader.result as string).split(',')[1]
-            const imageId = await window.electronAPI.images.save(
-              currentNote.id,
-              base64,
-              file.name || 'paste.png'
-            )
-
-            // Insert image as HTML <img> with width=600 (matching the insert image button)
-            const imageHtml = `\n<img src="arknote://${imageId}" alt="image" width="600" />\n`
-            const pos = view.state.selection.main.head
-            view.dispatch({
-              changes: { from: pos, insert: imageHtml },
-            })
+              const imageHtml = `\n<img src="arknote://${imageId}" alt="image" width="600" />\n`
+              const pos = view.state.selection.main.head
+              view.dispatch({
+                changes: { from: pos, insert: imageHtml },
+              })
+            }
+            reader.readAsDataURL(file)
+          } catch (error) {
+            console.error('Failed to paste image:', error)
           }
-          reader.readAsDataURL(file)
-        } catch (error) {
-          console.error('Failed to paste image:', error)
-        }
 
-        return true
+          return true
+        }
       }
     }
 
-    return false
-  }, [currentNote])
+    const candidate = getPasteConvertCandidate(event.clipboardData)
+    if (!candidate) return false
+
+    event.preventDefault()
+    const { from, to } = view.state.selection.main
+    const insert = candidate.plain
+    view.dispatch({
+      changes: { from, to, insert },
+      selection: { anchor: from + insert.length },
+      userEvent: 'input.paste',
+    })
+
+    const offer: PasteConvertOffer = {
+      from,
+      to: from + insert.length,
+      plain: insert,
+      html: candidate.html,
+    }
+    pasteConvertOfferRef.current = offer
+    setPasteConvertOffer(offer)
+    return true
+  }, [currentNote, dismissPasteConvertOffer])
+
+  const handlePasteRef = useRef(handlePaste)
+  handlePasteRef.current = handlePaste
 
   // Copy/cut: convert arknote:// images in selection to external data URLs
   const handleCopyOrCut = useCallback((event: ClipboardEvent, view: EditorView, isCut: boolean) => {
@@ -187,6 +322,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
         largeDocument
           ? markdown({ base: markdownLanguage })
           : markdown({ base: markdownLanguage, codeLanguages: languages }),
+        syntaxHighlighting(theme === 'dark' ? darkHighlightStyle : lightHighlightStyle),
         theme === 'dark' ? darkTheme : lightTheme,
         keymap.of([
           indentWithTab,
@@ -233,13 +369,22 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onChange(update.state.doc.toString())
+            const offer = pasteConvertOfferRef.current
+            if (offer) {
+              const doc = update.state.doc
+              if (
+                offer.from > doc.length
+                || offer.to > doc.length
+                || doc.sliceString(offer.from, offer.to) !== offer.plain
+              ) {
+                pasteConvertOfferRef.current = null
+                setPasteConvertOffer(null)
+              }
+            }
           }
         }),
         EditorView.domEventHandlers({
-          paste: (event, view) => {
-            handlePaste(event, view)
-            return false
-          },
+          paste: (event, view) => handlePasteRef.current(event, view),
           copy: (event, view) => handleCopyOrCut(event, view, false),
           cut: (event, view) => handleCopyOrCut(event, view, true),
           contextmenu: (event, view) => {
@@ -315,6 +460,12 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
   return (
     <>
       <div ref={containerRef} className="editor-container" />
+      {pasteConvertOffer && (
+        <PasteConvertNotice
+          onConvert={handleConvertPaste}
+          onDismiss={dismissPasteConvertOffer}
+        />
+      )}
       {imageContextMenu && (
         <ImageContextMenu
           x={imageContextMenu.x}
