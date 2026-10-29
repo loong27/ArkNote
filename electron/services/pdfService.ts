@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeImage } from 'electron'
+import { BrowserWindow, nativeImage, type WebContents } from 'electron'
 import fs from 'fs'
 import {
   SHARE_CARD_WIDTH,
@@ -6,10 +6,14 @@ import {
   getBrandLogoDataUrl,
 } from './shareDocument'
 
-/** Chromium full-page screenshot soft limit (CSS pixels). */
-const CAPTURE_MAX_HEIGHT = 16000
+/** Chromium texture soft limit (~16384px). Keep CSS height * DPR under that. */
 const DEVICE_SCALE_FACTOR = 2
+const CAPTURE_MAX_HEIGHT = Math.floor(16384 / DEVICE_SCALE_FACTOR)
 const VIEWPORT_HEIGHT = 900
+const IMAGE_WAIT_TIMEOUT_MS = 5000
+const CDP_COMMAND_TIMEOUT_MS = 8000
+const PAINT_WAIT_TIMEOUT_MS = 2000
+const EXPORT_PNG_TIMEOUT_MS = 30000
 
 export interface ShareExportPayload {
   title: string
@@ -17,20 +21,63 @@ export interface ShareExportPayload {
   slogan: string
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`))
+    }, ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (err) => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+  })
+}
+
 async function waitForImages(win: BrowserWindow): Promise<void> {
-  await win.webContents.executeJavaScript(`
-    (async () => {
-      const imgs = Array.from(document.images || [])
-      await Promise.all(imgs.map((img) => {
-        if (img.complete) return Promise.resolve()
-        return new Promise((resolve) => {
-          img.addEventListener('load', resolve, { once: true })
-          img.addEventListener('error', resolve, { once: true })
-        })
-      }))
-    })()
-  `)
+  await withTimeout(
+    win.webContents.executeJavaScript(`
+      (async () => {
+        const imgs = Array.from(document.images || [])
+        await Promise.all(imgs.map((img) => {
+          if (img.complete) return Promise.resolve()
+          return new Promise((resolve) => {
+            img.addEventListener('load', resolve, { once: true })
+            img.addEventListener('error', resolve, { once: true })
+          })
+        }))
+      })()
+    `),
+    IMAGE_WAIT_TIMEOUT_MS,
+    'waitForImages',
+  ).catch((err) => {
+    console.warn('waitForImages:', err instanceof Error ? err.message : err)
+  })
   await new Promise((resolve) => setTimeout(resolve, 200))
+}
+
+async function waitForPaint(win: BrowserWindow, timeoutMs = PAINT_WAIT_TIMEOUT_MS): Promise<void> {
+  const wc = win.webContents
+  await new Promise<void>((resolve) => {
+    let settled = false
+    const done = () => {
+      if (settled) return
+      settled = true
+      wc.removeListener('paint', onPaint)
+      clearTimeout(timer)
+      resolve()
+    }
+    const onPaint = () => done()
+    const timer = setTimeout(done, timeoutMs)
+    wc.once('paint', onPaint)
+    // Nudge a frame in case paint already happened before we subscribed.
+    void wc.executeJavaScript('void document.body?.offsetHeight').catch(() => done())
+  })
 }
 
 async function measureContentHeight(win: BrowserWindow): Promise<number> {
@@ -115,15 +162,33 @@ async function stitchPngSlices(
   return Buffer.from(base64, 'base64')
 }
 
+async function cdpSendCommand(
+  wc: WebContents,
+  method: string,
+  params?: Record<string, unknown>,
+): Promise<unknown> {
+  return withTimeout(
+    wc.debugger.sendCommand(method, params),
+    CDP_COMMAND_TIMEOUT_MS,
+    `CDP ${method}`,
+  )
+}
+
 async function captureFullPageCdp(
   win: BrowserWindow,
   width: number,
   contentHeight: number,
 ): Promise<Buffer> {
   const wc = win.webContents
-  wc.debugger.attach('1.3')
   try {
-    await wc.debugger.sendCommand('Emulation.setDeviceMetricsOverride', {
+    wc.debugger.attach('1.3')
+  } catch (err) {
+    throw new Error(`CDP debugger attach failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  try {
+    await cdpSendCommand(wc, 'Page.enable')
+    await cdpSendCommand(wc, 'Emulation.setDeviceMetricsOverride', {
       width,
       height: contentHeight,
       deviceScaleFactor: DEVICE_SCALE_FACTOR,
@@ -132,16 +197,21 @@ async function captureFullPageCdp(
 
     await new Promise((resolve) => setTimeout(resolve, 150))
 
-    const result = await wc.debugger.sendCommand('Page.captureScreenshot', {
+    // fromSurface:false avoids hanging on hidden windows with no GPU compositor surface.
+    const result = await cdpSendCommand(wc, 'Page.captureScreenshot', {
       format: 'png',
-      fromSurface: true,
+      fromSurface: false,
       captureBeyondViewport: true,
     }) as { data: string }
+
+    if (!result?.data) {
+      throw new Error('CDP captureScreenshot returned empty data')
+    }
 
     return Buffer.from(result.data, 'base64')
   } finally {
     try {
-      await wc.debugger.sendCommand('Emulation.clearDeviceMetricsOverride')
+      await cdpSendCommand(wc, 'Emulation.clearDeviceMetricsOverride')
     } catch {
       // ignore
     }
@@ -176,7 +246,7 @@ async function captureSlicedFallback(
   while (captured < contentHeight) {
     const sliceH = Math.min(viewportH, contentHeight - captured)
     await win.webContents.executeJavaScript(`window.scrollTo(0, ${captured})`)
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await waitForPaint(win, 300)
 
     const image = await win.webContents.capturePage()
     const size = image.getSize()
@@ -214,9 +284,11 @@ export class PdfService {
       width,
       height,
       show: false,
+      paintWhenInitiallyHidden: true,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
+        offscreen: true,
       },
     })
   }
@@ -255,12 +327,17 @@ export class PdfService {
    * Uses CDP full-page screenshot so OS window height clamps cannot smear the image.
    */
   async exportToPng(payload: ShareExportPayload): Promise<Buffer> {
+    return withTimeout(this.exportToPngInner(payload), EXPORT_PNG_TIMEOUT_MS, 'exportToPng')
+  }
+
+  private async exportToPngInner(payload: ShareExportPayload): Promise<Buffer> {
     const width = SHARE_CARD_WIDTH
     const win = this.createHiddenWindow(width, VIEWPORT_HEIGHT)
 
     try {
       const fullHtml = this.buildHtml(payload, width)
       await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(fullHtml)}`)
+      await waitForPaint(win)
       await waitForImages(win)
       await prepareForCapture(win)
 

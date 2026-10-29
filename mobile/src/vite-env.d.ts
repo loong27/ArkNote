@@ -1,9 +1,7 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly BASE_URL: string
-}
-
-interface ImportMeta {
-  readonly env: ImportMetaEnv
+declare module 'isomorphic-git/http/web' {
+  import type { HttpClient } from 'isomorphic-git'
+  const http: HttpClient
+  export default http
 }

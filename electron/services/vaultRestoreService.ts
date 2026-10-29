@@ -2,7 +2,12 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { simpleGit } from 'simple-git'
-import { embedHttpsCredentials, isValidGitRemoteUrl, stripEmbeddedCredentials } from './gitCredentials'
+import {
+  embedHttpsCredentials,
+  isValidGitRemoteUrl,
+  normalizeGitBranch,
+  stripEmbeddedCredentials,
+} from './gitCredentials'
 
 export interface VaultRestoreRequest {
   repoUrl: string
@@ -19,8 +24,6 @@ interface VaultRestoreServiceOptions {
   cloneRepository?: (repoUrl: string, targetDir: string, branch: string) => Promise<void>
   getHttpsToken?: () => string
 }
-
-const BRANCH_NAME = /^[A-Za-z0-9._/-]+$/
 
 export class VaultRestoreService {
   private readonly cloneRepository: (repoUrl: string, targetDir: string, branch: string) => Promise<void>
@@ -95,21 +98,7 @@ export class VaultRestoreService {
   }
 
   private validateBranch(value: string): string {
-    const branch = value.trim() || 'main'
-    if (
-      branch.length > 200
-      || !BRANCH_NAME.test(branch)
-      || branch.startsWith('-')
-      || branch.startsWith('/')
-      || branch.endsWith('/')
-      || branch.endsWith('.')
-      || branch.includes('..')
-      || branch.includes('//')
-      || branch.includes('@{')
-    ) {
-      throw new Error('分支名称无效')
-    }
-    return branch
+    return normalizeGitBranch(value)
   }
 
   private assertTargetIsEmpty(): void {

@@ -17,8 +17,16 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../shared/*"]
+      "@shared/*": ["../shared/*"],
+      "ark-git": ["plugins/ark-git/src/index.ts"]
     }
   },
-  "include": ["src", "capacitor.config.ts", "../shared/vaultCrypto.ts", "../shared/vaultRead.ts"]
+  "include": [
+    "src",
+    "capacitor.config.ts",
+    "plugins/ark-git/src/**/*.ts",
+    "../shared/vaultCrypto.ts",
+    "../shared/vaultRead.ts",
+    "../shared/gitRemote.ts"
+  ]
 }

@@ -12,14 +12,18 @@
     "cap:android": "npm run cap:sync && npx cap open android",
     "cap:ios": "npm run cap:sync && npx cap open ios",
     "cap:add:android": "npx cap add android",
-    "cap:add:ios": "npx cap add ios"
+    "cap:add:ios": "npx cap add ios",
+    "plugin:ark-git:build": "npm run build --prefix plugins/ark-git"
   },
   "dependencies": {
     "@capacitor/app": "^7.0.1",
     "@capacitor/core": "^7.2.0",
     "@capacitor/filesystem": "^7.1.1",
+    "@capacitor/preferences": "^7.0.4",
+    "ark-git": "file:plugins/ark-git",
     "dompurify": "^3.4.8",
     "fflate": "^0.8.2",
+    "isomorphic-git": "^1.44.8",
     "markdown-it": "^14.1.0",
     "markdown-it-task-lists": "^2.1.1",
     "react": "^18.3.1",

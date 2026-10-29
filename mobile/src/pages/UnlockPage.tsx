@@ -1,19 +1,25 @@
-import React, { useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { filesFromFileList, validateVaultFiles } from '../lib/importVault'
-import { unlockFromFiles } from '../lib/session'
+import { unlockFromFiles, unlockFromStore, vaultExists } from '../lib/session'
 
 interface Props {
   onUnlocked: () => void
+  onOpenSync: () => void
 }
 
-export const UnlockPage: React.FC<Props> = ({ onUnlocked }) => {
+export const UnlockPage: React.FC<Props> = ({ onUnlocked, onOpenSync }) => {
   const [password, setPassword] = useState('')
   const [fileLabel, setFileLabel] = useState('尚未选择仓库文件')
   const [files, setFiles] = useState<Map<string, Uint8Array> | null>(null)
+  const [hasLocalVault, setHasLocalVault] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const zipRef = useRef<HTMLInputElement>(null)
   const dirRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    void vaultExists().then(setHasLocalVault)
+  }, [])
 
   const onPick = async (list: FileList | null) => {
     setError('')
@@ -32,17 +38,20 @@ export const UnlockPage: React.FC<Props> = ({ onUnlocked }) => {
 
   const unlock = async () => {
     setError('')
-    if (!files) {
-      setError('请先导入加密备份 zip，或选择含 salt.bin 的仓库目录')
-      return
-    }
     if (!password) {
       setError('请输入密码')
       return
     }
     setLoading(true)
     try {
-      await unlockFromFiles(files, password)
+      if (files) {
+        await unlockFromFiles(files, password)
+      } else if (hasLocalVault) {
+        await unlockFromStore(password)
+      } else {
+        setError('请先导入加密备份、选择仓库目录，或从 Git 同步')
+        return
+      }
       onUnlocked()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -55,10 +64,14 @@ export const UnlockPage: React.FC<Props> = ({ onUnlocked }) => {
     <div className="app-shell">
       <div className="brand">
         <h1>arkNote Reader</h1>
-        <p>只读解锁本地加密仓库。不编辑、不同步、无账号。</p>
+        <p>只读解锁本地加密仓库。支持从 Git 单向同步（云端 → 本机）。</p>
       </div>
 
       <div className="card">
+        {hasLocalVault && !files && (
+          <p className="hint ok" style={{ marginTop: 0 }}>已检测到本地仓库，可直接输入密码解锁。</p>
+        )}
+
         <label className="file-pick">
           <span className="field"><label>导入加密备份（zip）</label></span>
           <input
@@ -104,8 +117,12 @@ export const UnlockPage: React.FC<Props> = ({ onUnlocked }) => {
           {loading ? '解锁中…' : '解锁只读'}
         </button>
 
+        <button className="btn" style={{ marginTop: 8 }} type="button" onClick={onOpenSync}>
+          从 Git 同步…
+        </button>
+
         <p className="hint">
-          在桌面端「设置 → 备份」导出加密备份，拷到手机后在此导入。密码无法找回。
+          也可在桌面端「设置 → 备份」导出加密备份后导入。配置 Git 后可拉取远端加密仓库。密码无法找回。
         </p>
       </div>
     </div>

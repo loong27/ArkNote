@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@shared': path.resolve(__dirname, '../shared'),
+      'ark-git': path.resolve(__dirname, 'plugins/ark-git/src/index.ts'),
     },
   },
   server: {

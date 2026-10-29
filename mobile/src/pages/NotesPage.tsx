@@ -5,9 +5,10 @@ import { getReader, listNotes, lockVault } from '../lib/session'
 interface Props {
   onOpenNote: (noteId: string, title: string) => void
   onLock: () => void
+  onOpenSync: () => void
 }
 
-export const NotesPage: React.FC<Props> = ({ onOpenNote, onLock }) => {
+export const NotesPage: React.FC<Props> = ({ onOpenNote, onLock, onOpenSync }) => {
   const [notes, setNotes] = useState<VaultNoteMeta[]>([])
   const [query, setQuery] = useState('')
   const [hits, setHits] = useState<VaultSearchHit[] | null>(null)
@@ -60,8 +61,12 @@ export const NotesPage: React.FC<Props> = ({ onOpenNote, onLock }) => {
     <div className="app-shell">
       <div className="topbar">
         <h2>笔记</h2>
+        <button className="icon-btn" type="button" onClick={onOpenSync}>
+          同步
+        </button>
         <button
           className="icon-btn"
+          type="button"
           onClick={() => {
             lockVault()
             onLock()
