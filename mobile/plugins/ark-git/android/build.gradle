@@ -51,8 +51,8 @@ dependencies {
     implementation project(':capacitor-android')
     implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
     implementation 'org.eclipse.jgit:org.eclipse.jgit:6.10.0.202406032230-r'
+    // ssh.apache already brings sshd-osgi; do not add sshd-core (duplicate classes).
     implementation 'org.eclipse.jgit:org.eclipse.jgit.ssh.apache:6.10.0.202406032230-r'
-    implementation 'org.apache.sshd:sshd-core:2.14.0'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
