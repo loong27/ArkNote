@@ -39,6 +39,17 @@ android {
         sourceCompatibility JavaVersion.VERSION_21
         targetCompatibility JavaVersion.VERSION_21
     }
+    packaging {
+        resources {
+            excludes += [
+                'OSGI-INF/**',
+                'about.html',
+                'plugin.properties',
+                'META-INF/INDEX.LIST',
+                'META-INF/DEPENDENCIES',
+            ]
+        }
+    }
 }
 
 repositories {
