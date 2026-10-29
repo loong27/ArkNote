@@ -55,7 +55,9 @@ const api: ElectronAPI = {
     list: () => ipcRenderer.invoke('tags:list'),
     create: (name: string, color: string) =>
       ipcRenderer.invoke('tags:create', name, color),
-    delete: (id: string) => ipcRenderer.invoke('tags:delete', id),
+    rename: (id: string, name: string) => ipcRenderer.invoke('tags:rename', id, name),
+    delete: (id: string, removeFromNotes?: boolean) =>
+      ipcRenderer.invoke('tags:delete', id, removeFromNotes),
     assign: (noteId: string, tagIds: string[]) =>
       ipcRenderer.invoke('tags:assign', noteId, tagIds),
     getNotesForTag: (tagId: string) =>
@@ -66,12 +68,18 @@ const api: ElectronAPI = {
     get: (noteId: string, timestamp: string) =>
       ipcRenderer.invoke('versions:get', noteId, timestamp),
     save: (noteId: string) => ipcRenderer.invoke('versions:save', noteId),
+    diff: (noteId: string, timestamp: string) =>
+      ipcRenderer.invoke('versions:diff', noteId, timestamp),
+    prune: (noteId?: string) => ipcRenderer.invoke('versions:prune', noteId),
   },
   search: {
-    global: (query: string, directoryIds?: string[], totalLimit?: number) =>
-      ipcRenderer.invoke('search:global', query, directoryIds, totalLimit),
+    global: (query: string, directoryIds?: string[], totalLimit?: number, tagIds?: string[], offset?: number) =>
+      ipcRenderer.invoke('search:global', query, directoryIds, totalLimit, tagIds, offset),
+    byTitle: (query: string, limit?: number) =>
+      ipcRenderer.invoke('search:byTitle', query, limit),
     inNote: (noteId: string, query: string) =>
       ipcRenderer.invoke('search:inNote', noteId, query),
+    backlinks: (noteId: string) => ipcRenderer.invoke('search:backlinks', noteId),
   },
   images: {
     save: (noteId: string, imageData: string, fileName: string) =>
@@ -118,6 +126,37 @@ const api: ElectronAPI = {
   import: {
     importMd: (directoryId: string) => ipcRenderer.invoke('import:importMd', directoryId),
     importPdf: (directoryId: string) => ipcRenderer.invoke('import:importPdf', directoryId),
+    importFolder: (directoryId: string | null) => ipcRenderer.invoke('import:importFolder', directoryId),
+  },
+  vault: {
+    exportBackup: () => ipcRenderer.invoke('vault:exportBackup'),
+    verifyIntegrity: () => ipcRenderer.invoke('vault:verifyIntegrity'),
+    getRecoveryTipPending: () => ipcRenderer.invoke('vault:getRecoveryTipPending'),
+    dismissRecoveryTip: () => ipcRenderer.invoke('vault:dismissRecoveryTip'),
+  },
+  notesExtras: {
+    getPinned: () => ipcRenderer.invoke('notesExtras:getPinned'),
+    setPinned: (noteIds) => ipcRenderer.invoke('notesExtras:setPinned', noteIds),
+    getRecent: () => ipcRenderer.invoke('notesExtras:getRecent'),
+    touchRecent: (noteId) => ipcRenderer.invoke('notesExtras:touchRecent', noteId),
+    getEditorPrefs: () => ipcRenderer.invoke('notesExtras:getEditorPrefs'),
+    setEditorPrefs: (prefs) => ipcRenderer.invoke('notesExtras:setEditorPrefs', prefs),
+    createFromTemplate: (directoryId, template) =>
+      ipcRenderer.invoke('notesExtras:createFromTemplate', directoryId, template),
+    getDailyNote: () => ipcRenderer.invoke('notesExtras:getDailyNote'),
+    getOutline: (noteId) => ipcRenderer.invoke('notesExtras:getOutline', noteId),
+    listAttachments: (noteId) => ipcRenderer.invoke('notesExtras:listAttachments', noteId),
+    addAttachment: (noteId) => ipcRenderer.invoke('notesExtras:addAttachment', noteId),
+    openAttachment: (attachmentId) => ipcRenderer.invoke('notesExtras:openAttachment', attachmentId),
+    getTimeCapsule: () => ipcRenderer.invoke('notesExtras:getTimeCapsule'),
+    listByMonth: (request) => ipcRenderer.invoke('notesExtras:listByMonth', request),
+  },
+  coldBackup: {
+    getConfig: () => ipcRenderer.invoke('coldBackup:getConfig'),
+    setConfig: (config) => ipcRenderer.invoke('coldBackup:setConfig', config),
+    runNow: () => ipcRenderer.invoke('coldBackup:runNow'),
+    testConnection: () => ipcRenderer.invoke('coldBackup:testConnection'),
+    restoreFromFile: () => ipcRenderer.invoke('coldBackup:restoreFromFile'),
   },
   config: {
     getDataDir: () => ipcRenderer.invoke('config:getDataDir'),
@@ -175,4 +214,3 @@ const api: ElectronAPI = {
 }
 
 contextBridge.exposeInMainWorld('electronAPI', api)
-

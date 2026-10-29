@@ -1,6 +1,7 @@
-import { ipcMain, dialog, BrowserWindow, clipboard, nativeImage } from 'electron'
+import { ipcMain, dialog, BrowserWindow, clipboard, nativeImage, shell } from 'electron'
 import path from 'path'
 import fs from 'fs'
+import os from 'os'
 import { EncryptionService, VaultIntegrityError } from '../services/encryption'
 import { FileManager } from '../services/fileManager'
 import { NoteService } from '../services/noteService'
@@ -14,6 +15,8 @@ import { TrashService } from '../services/trashService'
 import { ImportService } from '../services/importService'
 import { AppConfig } from '../services/appConfig'
 import { VaultRestoreService } from '../services/vaultRestoreService'
+import { VaultBackupService } from '../services/vaultBackupService'
+import { ColdBackupService } from '../services/coldBackupService'
 import { migrateLegacyBrandReferences } from '../../shared/brand'
 import {
   collectArkNoteImageIds,
@@ -47,7 +50,11 @@ export function registerIpcHandlers(
   const pdfService = new PdfService()
   const trashService = new TrashService(fileManager)
   const importService = new ImportService(fileManager)
-  const vaultRestoreService = new VaultRestoreService(dataDir)
+  const vaultRestoreService = new VaultRestoreService(dataDir, {
+    getHttpsToken: () => appConfig.getGitHttpsToken(),
+  })
+  const vaultBackupService = new VaultBackupService(dataDir, encryption, fileManager)
+  const coldBackupService = new ColdBackupService(appConfig, dataDir, encryption, fileManager)
   let pendingAutoSyncResolver: ((ok: boolean) => void) | null = null
   let pendingAutoSyncTimeout: NodeJS.Timeout | null = null
   const authLimiter = new AuthAttemptLimiter(createVaultAuthKey(dataDir), appConfig)
@@ -106,6 +113,8 @@ export function registerIpcHandlers(
 
   const syncService = new SyncService(dataDir, {
     beforeAutoSync: requestRendererFlushForAutoSync,
+    getHttpsToken: () => appConfig.getGitHttpsToken(),
+    fileManager,
     onDataChanged: () => {
       try {
         reloadDataCaches()
@@ -123,6 +132,7 @@ export function registerIpcHandlers(
   const lockVault = () => {
     noteService.cleanup()
     syncService.cleanup()
+    coldBackupService.stopScheduler()
     settleAutoSyncRequest(false)
     fileManager.clearCache()
     searchService.clearCache()
@@ -175,6 +185,11 @@ export function registerIpcHandlers(
         if (meta.syncConfig.enabled) {
           syncService.configure(meta.syncConfig).catch(console.error)
         }
+        coldBackupService.startScheduler()
+
+        if (isFirstTime) {
+          appConfig.setRecoveryTipPending(true)
+        }
 
         authLimiter.reset()
         return {
@@ -215,9 +230,13 @@ export function registerIpcHandlers(
         return { success: false, message: '本地已有加密数据，不能执行首次恢复' }
       }
 
+      if (typeof request?.httpsToken === 'string' && request.httpsToken.trim()) {
+        appConfig.setGitHttpsToken(request.httpsToken.trim())
+      }
       const result = await vaultRestoreService.restore({
         repoUrl: typeof request?.repoUrl === 'string' ? request.repoUrl : '',
         branch: typeof request?.branch === 'string' ? request.branch : 'main',
+        httpsToken: appConfig.getGitHttpsToken(),
       })
       if (result.success) authLimiter.reset()
       return result
@@ -320,6 +339,7 @@ export function registerIpcHandlers(
 
   ipcMain.handle('config:getAll', async () => {
     const security = appConfig.getSecurityConfig()
+    const editor = appConfig.getEditorPrefs()
     return {
       dataDir: appConfig.getDataDir(),
       defaultDataDir: AppConfig.getDefaultDataDir(),
@@ -329,6 +349,11 @@ export function registerIpcHandlers(
       sidebarWidth: appConfig.getSidebarWidth(),
       autoLockMinutes: security.autoLockMinutes,
       lockOnMinimize: security.lockOnMinimize,
+      editorFontSize: editor.fontSize,
+      editorDefaultView: editor.defaultView,
+      pinnedNoteIds: appConfig.getPinnedNoteIds(),
+      recentNoteIds: appConfig.getRecentNoteIds(),
+      recoveryTipPending: appConfig.getRecoveryTipPending(),
     }
   })
 
@@ -643,8 +668,12 @@ export function registerIpcHandlers(
     return tagService.create(name, color)
   })
 
-  ipcMain.handle('tags:delete', async (_event, id: string) => {
-    return tagService.delete(id)
+  ipcMain.handle('tags:rename', async (_event, id: string, name: string) => {
+    return tagService.rename(id, name)
+  })
+
+  ipcMain.handle('tags:delete', async (_event, id: string, removeFromNotes?: boolean) => {
+    return tagService.delete(id, Boolean(removeFromNotes))
   })
 
   ipcMain.handle('tags:assign', async (_event, noteId: string, tagIds: string[]) => {
@@ -669,14 +698,30 @@ export function registerIpcHandlers(
     versionService.save(noteId)
   })
 
+  ipcMain.handle('versions:diff', async (_event, noteId: string, timestamp: string) => {
+    return versionService.diff(noteId, timestamp)
+  })
+
+  ipcMain.handle('versions:prune', async (_event, noteId?: string) => {
+    return versionService.prune(noteId)
+  })
+
   // ========== Search ==========
 
-  ipcMain.handle('search:global', async (_event, query: string, directoryIds?: string[], totalLimit?: number) => {
-    return searchService.global(query, directoryIds, totalLimit)
+  ipcMain.handle('search:global', async (_event, query: string, directoryIds?: string[], totalLimit?: number, tagIds?: string[], offset?: number) => {
+    return searchService.global(query, directoryIds, totalLimit, tagIds, offset)
+  })
+
+  ipcMain.handle('search:byTitle', async (_event, query: string, limit?: number) => {
+    return searchService.byTitle(query, limit)
   })
 
   ipcMain.handle('search:inNote', async (_event, noteId: string, query: string) => {
     return searchService.inNote(noteId, query)
+  })
+
+  ipcMain.handle('search:backlinks', async (_event, noteId: string) => {
+    return searchService.backlinks(noteId)
   })
 
   // ========== Images ==========
@@ -875,8 +920,15 @@ export function registerIpcHandlers(
   // ========== Sync ==========
 
   ipcMain.handle('sync:configure', async (_event, config) => {
-    fileManager.updateSyncConfig(config)
-    await syncService.configure(config)
+    if (typeof config?.httpsToken === 'string') {
+      appConfig.setGitHttpsToken(config.httpsToken === '********' ? appConfig.getGitHttpsToken() : config.httpsToken)
+    }
+    const vaultConfig = fileManager.sanitizeSyncConfig(config || {})
+    fileManager.updateSyncConfig(vaultConfig)
+    await syncService.configure({
+      ...vaultConfig,
+      httpsToken: appConfig.getGitHttpsToken(),
+    })
   })
 
   ipcMain.handle('sync:auto-response', async (_event, response: { ok: boolean }) => {
@@ -884,18 +936,18 @@ export function registerIpcHandlers(
   })
 
   ipcMain.handle('sync:getConfig', async () => {
-    return syncService.getConfig() || {
+    const base = syncService.getConfig() || fileManager.getMetadata().syncConfig || {
       enabled: false,
-      provider: 'git',
+      provider: 'git' as const,
       repoUrl: '',
       branch: 'main',
-      ossEndpoint: '',
-      ossBucket: '',
-      ossAccessKey: '',
-      ossSecretKey: '',
-      ossRegion: '',
       autoSync: false,
       syncInterval: 30,
+    }
+    return {
+      ...base,
+      provider: 'git' as const,
+      httpsToken: appConfig.getGitHttpsToken() ? '********' : '',
     }
   })
 
@@ -918,6 +970,201 @@ export function registerIpcHandlers(
     }
     return result
   })
+
+  // ========== Vault backup / integrity ==========
+
+  ipcMain.handle('vault:exportBackup', async () => {
+    return vaultBackupService.exportEncryptedArchive()
+  })
+
+  ipcMain.handle('vault:verifyIntegrity', async () => {
+    return vaultBackupService.verifyIntegrity()
+  })
+
+  ipcMain.handle('vault:getRecoveryTipPending', async () => appConfig.getRecoveryTipPending())
+  ipcMain.handle('vault:dismissRecoveryTip', async () => {
+    appConfig.setRecoveryTipPending(false)
+  })
+
+  // ========== Import folder ==========
+
+  ipcMain.handle('import:importFolder', async (_event, directoryId: string | null) => {
+    const result = await dialog.showOpenDialog({
+      title: tr('选择要导入的 Markdown 文件夹'),
+      properties: ['openDirectory'],
+    })
+    if (result.canceled || result.filePaths.length === 0) {
+      return { success: false, imported: 0, message: '已取消' }
+    }
+    try {
+      const { imported, noteIds } = importService.importMarkdownFolder(
+        result.filePaths[0],
+        directoryId,
+        appConfig.getLanguage(),
+        true,
+      )
+      for (const id of noteIds) searchService.upsertNote(id)
+      return { success: true, imported, message: `成功导入 ${imported} 篇 Markdown 笔记` }
+    } catch (error) {
+      return {
+        success: false,
+        imported: 0,
+        message: `导入失败: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    }
+  })
+
+  // ========== Notes extras: pin/recent/templates/outline/attachments/time capsule ==========
+
+  ipcMain.handle('notesExtras:getPinned', async () => appConfig.getPinnedNoteIds())
+  ipcMain.handle('notesExtras:setPinned', async (_event, noteIds: string[]) => appConfig.setPinnedNoteIds(noteIds))
+  ipcMain.handle('notesExtras:getRecent', async () => appConfig.getRecentNoteIds())
+  ipcMain.handle('notesExtras:touchRecent', async (_event, noteId: string) => appConfig.touchRecentNote(noteId))
+  ipcMain.handle('notesExtras:getEditorPrefs', async () => appConfig.getEditorPrefs())
+  ipcMain.handle('notesExtras:setEditorPrefs', async (_event, prefs) => appConfig.setEditorPrefs(prefs || {}))
+
+  ipcMain.handle('notesExtras:createFromTemplate', async (_event, directoryId: string, template: 'blank' | 'daily' | 'meeting') => {
+    const language = appConfig.getLanguage()
+    const today = new Date()
+    const dateStr = today.toISOString().slice(0, 10)
+    const titles = {
+      blank: tr('未命名笔记'),
+      daily: `${tr('日记')} ${dateStr}`,
+      meeting: `${tr('会议记录')} ${dateStr}`,
+    }
+    const bodies = {
+      blank: `# ${titles.blank}\n\n`,
+      daily: `# ${titles.daily}\n\n## ${tr('今日要点')}\n\n- \n\n## ${tr('随记')}\n\n`,
+      meeting: `# ${titles.meeting}\n\n## ${tr('参与人')}\n\n- \n\n## ${tr('议程')}\n\n1. \n\n## ${tr('结论')}\n\n`,
+    }
+    const note = noteService.create(directoryId, titles[template] || titles.blank)
+    fileManager.writeNoteContent(note.id, bodies[template] || bodies.blank)
+    searchService.upsertNote(note.id)
+    return note
+  })
+
+  ipcMain.handle('notesExtras:getDailyNote', async () => {
+    const language = appConfig.getLanguage()
+    const dateStr = new Date().toISOString().slice(0, 10)
+    const title = `${tr('日记')} ${dateStr}`
+    const meta = fileManager.getMetadata()
+    const existing = meta.notes.find(n => n.title === title)
+    if (existing) return existing
+
+    let journalDir = meta.directories.find(d => d.parentId === null && (d.name === '日记' || d.name === 'Journal'))
+    if (!journalDir) {
+      journalDir = directoryService.create(null, language === 'en-US' ? 'Journal' : '日记')
+    }
+    const note = noteService.create(journalDir.id, title)
+    fileManager.writeNoteContent(note.id, `# ${title}\n\n## ${tr('今日要点')}\n\n- \n\n## ${tr('随记')}\n\n`)
+    searchService.upsertNote(note.id)
+    return note
+  })
+
+  ipcMain.handle('notesExtras:getOutline', async (_event, noteId: string) => {
+    const content = fileManager.readNoteContent(noteId)
+    const outline: Array<{ level: number; text: string; line: number }> = []
+    const lines = content.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const m = /^(#{1,3})\s+(.+)$/.exec(lines[i])
+      if (m) outline.push({ level: m[1].length, text: m[2].trim(), line: i + 1 })
+    }
+    return outline
+  })
+
+  ipcMain.handle('notesExtras:listAttachments', async (_event, noteId: string) => {
+    const content = fileManager.readNoteContent(noteId)
+    return fileManager.listAttachmentsForNote(noteId, content)
+  })
+
+  ipcMain.handle('notesExtras:addAttachment', async (_event, noteId: string) => {
+    const result = await dialog.showOpenDialog({
+      title: tr('选择附件'),
+      properties: ['openFile'],
+      filters: [
+        { name: 'Files', extensions: ['pdf', 'zip', 'txt', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'md'] },
+      ],
+    })
+    if (result.canceled || !result.filePaths[0]) return null
+    const filePath = result.filePaths[0]
+    const data = fs.readFileSync(filePath)
+    const saved = fileManager.saveAttachment(data, path.basename(filePath))
+    const content = fileManager.readNoteContent(noteId)
+    const link = `\n\n[📎 ${saved.name}](arknote-file://${saved.id})\n`
+    fileManager.writeNoteContent(noteId, content + link)
+    searchService.upsertNote(noteId)
+    return { id: saved.id, name: saved.name, mime: 'application/octet-stream' }
+  })
+
+  ipcMain.handle('notesExtras:openAttachment', async (_event, attachmentId: string) => {
+    const attachment = fileManager.readAttachment(attachmentId)
+    if (!attachment) return { success: false, message: '附件不存在' }
+    const tmp = path.join(os.tmpdir(), `arknote-att-${attachmentId}-${attachment.name}`)
+    fs.writeFileSync(tmp, attachment.buffer)
+    await shell.openPath(tmp)
+    return { success: true }
+  })
+
+  ipcMain.handle('notesExtras:getTimeCapsule', async () => {
+    const meta = fileManager.getMetadata()
+    const buckets = new Map<string, { year: number; month: number; created: number; updated: number }>()
+    for (const note of meta.notes) {
+      const created = new Date(note.createdAt)
+      const updated = new Date(note.updatedAt)
+      const cKey = `${created.getFullYear()}-${created.getMonth() + 1}`
+      const uKey = `${updated.getFullYear()}-${updated.getMonth() + 1}`
+      if (!buckets.has(cKey)) {
+        buckets.set(cKey, { year: created.getFullYear(), month: created.getMonth() + 1, created: 0, updated: 0 })
+      }
+      buckets.get(cKey)!.created += 1
+      if (!buckets.has(uKey)) {
+        buckets.set(uKey, { year: updated.getFullYear(), month: updated.getMonth() + 1, created: 0, updated: 0 })
+      }
+      buckets.get(uKey)!.updated += 1
+    }
+    return [...buckets.values()].sort((a, b) => b.year - a.year || b.month - a.month)
+  })
+
+  ipcMain.handle(
+    'notesExtras:listByMonth',
+    async (
+      _event,
+      request: { year: number; month: number; mode?: 'created' | 'updated' },
+    ) => {
+      const year = Number(request?.year)
+      const month = Number(request?.month)
+      const mode = request?.mode === 'updated' ? 'updated' : 'created'
+      if (!Number.isInteger(year) || !Number.isInteger(month) || month < 1 || month > 12) {
+        return []
+      }
+      const meta = fileManager.getMetadata()
+      const notes = meta.notes
+        .filter((note) => {
+          const d = new Date(mode === 'updated' ? note.updatedAt : note.createdAt)
+          return d.getFullYear() === year && d.getMonth() + 1 === month
+        })
+        .map((note) => ({
+          id: note.id,
+          title: note.title,
+          createdAt: note.createdAt,
+          updatedAt: note.updatedAt,
+        }))
+        .sort((a, b) => {
+          const ta = new Date(mode === 'updated' ? a.updatedAt : a.createdAt).getTime()
+          const tb = new Date(mode === 'updated' ? b.updatedAt : b.createdAt).getTime()
+          return tb - ta
+        })
+      return notes
+    },
+  )
+
+  // ========== Cold backup ==========
+
+  ipcMain.handle('coldBackup:getConfig', async () => coldBackupService.getConfig())
+  ipcMain.handle('coldBackup:setConfig', async (_event, config) => coldBackupService.setConfig(config))
+  ipcMain.handle('coldBackup:runNow', async () => coldBackupService.runNow())
+  ipcMain.handle('coldBackup:testConnection', async () => coldBackupService.testConnection())
+  ipcMain.handle('coldBackup:restoreFromFile', async () => coldBackupService.restoreFromFile())
 
   return {
     lockVault,

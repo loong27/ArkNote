@@ -2,12 +2,16 @@ import { simpleGit, SimpleGit } from 'simple-git'
 import fs from 'fs'
 import path from 'path'
 import type { SyncConfig, SyncStatus, SyncConflict } from '../../src/types'
+import { embedHttpsCredentials, stripEmbeddedCredentials } from './gitCredentials'
+import type { FileManager } from './fileManager'
 
 type SyncAction = 'manual' | 'auto'
 
 interface SyncServiceOptions {
   beforeAutoSync?: () => Promise<boolean>
   onDataChanged?: (action: SyncAction | 'resolve') => void
+  getHttpsToken?: () => string
+  fileManager?: FileManager
 }
 
 export class SyncService {
@@ -16,37 +20,52 @@ export class SyncService {
   private syncInterval: NodeJS.Timeout | null = null
   private config: SyncConfig | null = null
   private conflicts: SyncConflict[] = []
+  private lastSyncAt: string | null = null
   private operationQueue: Promise<void> = Promise.resolve()
   private operationActive = false
   private beforeAutoSync?: () => Promise<boolean>
   private onDataChanged?: (action: SyncAction | 'resolve') => void
+  private getHttpsToken?: () => string
+  private fileManager?: FileManager
 
   constructor(dataDir: string, options: SyncServiceOptions = {}) {
     this.dataDir = dataDir
     this.beforeAutoSync = options.beforeAutoSync
     this.onDataChanged = options.onDataChanged
+    this.getHttpsToken = options.getHttpsToken
+    this.fileManager = options.fileManager
   }
 
   getConfig(): SyncConfig | null {
-    return this.config
+    if (!this.config) return null
+    // Never expose raw token through status APIs that might be logged; include masked presence only via optional field
+    return {
+      ...this.config,
+      httpsToken: this.getHttpsToken?.() ? '********' : '',
+    }
   }
 
   async configure(config: SyncConfig): Promise<void> {
-    this.config = config
+    this.config = {
+      enabled: config.enabled,
+      provider: 'git',
+      repoUrl: stripEmbeddedCredentials(config.repoUrl || ''),
+      branch: config.branch || 'main',
+      autoSync: config.autoSync,
+      syncInterval: config.syncInterval,
+    }
     this.stopAutoSync()
 
-    if (!config.enabled) {
+    if (!this.config.enabled) {
       this.git = null
       this.conflicts = []
       return
     }
 
-    if (config.provider === 'git') {
-      await this.runExclusive(() => this.configureGit(config))
-    }
+    await this.runExclusive(() => this.configureGit(this.config!))
 
-    if (config.autoSync) {
-      this.startAutoSync(config.syncInterval)
+    if (this.config.autoSync) {
+      this.startAutoSync(this.config.syncInterval)
     }
   }
 
@@ -136,18 +155,27 @@ export class SyncService {
     }
   }
 
+  private resolveRemoteUrl(repoUrl: string): string {
+    const clean = stripEmbeddedCredentials(repoUrl)
+    const token = this.getHttpsToken?.()?.trim() || ''
+    return token ? embedHttpsCredentials(clean, token) : clean
+  }
+
   private async configureRemote(repoUrl: string): Promise<void> {
     if (!this.git) return
 
+    const remoteUrl = this.resolveRemoteUrl(repoUrl)
     const remotes = await this.git.getRemotes(true)
     const origin = remotes.find(remote => remote.name === 'origin')
     if (origin) {
-      if (this.isMergeInProgress() && origin.refs.fetch !== repoUrl) {
+      const currentClean = stripEmbeddedCredentials(origin.refs.fetch || '')
+      const nextClean = stripEmbeddedCredentials(repoUrl)
+      if (this.isMergeInProgress() && currentClean !== nextClean) {
         throw new Error('当前仓库仍有未完成的 merge，不能更换远程仓库地址')
       }
-      await this.git.remote(['set-url', 'origin', repoUrl])
+      await this.git.remote(['set-url', 'origin', remoteUrl])
     } else {
-      await this.git.addRemote('origin', repoUrl)
+      await this.git.addRemote('origin', remoteUrl)
     }
   }
 
@@ -231,12 +259,45 @@ export class SyncService {
       const conflictStatus = await this.getConflictStatusIfPresent()
       if (conflictStatus) return conflictStatus
 
+      const message = this.formatError(error)
       return {
-        lastSync: null,
+        lastSync: this.lastSyncAt,
         status: 'error',
-        message: `${this.actionLabel(action)}失败: ${this.formatError(error)}`,
+        message: `${this.actionLabel(action)}失败: ${message}`,
+        errorKind: this.classifyError(message),
       }
     }
+  }
+
+  private classifyError(message: string): SyncStatus['errorKind'] {
+    if (/authentication|permission denied|publickey|could not read|401|403|invalid.*token|denied/i.test(message)) {
+      return 'auth'
+    }
+    if (/conflict|merge/i.test(message)) return 'conflict'
+    if (/resolve host|network|timed out|timeout|connection|ECONN|ENOTFOUND/i.test(message)) {
+      return 'network'
+    }
+    return 'other'
+  }
+
+  private conflictDisplayName(file: string): string {
+    const normalized = file.replace(/\\/g, '/')
+    const noteMatch = /^notes\/([a-f0-9-]+)\.md\.enc$/i.exec(normalized)
+    if (noteMatch && this.fileManager) {
+      try {
+        const meta = this.fileManager.getMetadata()
+        const note = meta.notes.find(n => n.id === noteMatch[1])
+        if (note) return `笔记「${note.title || '未命名'}」`
+      } catch {
+        // ignore
+      }
+      return `笔记 ${noteMatch[1].slice(0, 8)}…`
+    }
+    if (normalized === 'metadata.json.enc') return '元数据（目录/标签/同步配置）'
+    if (normalized.startsWith('images/')) return `图片 ${path.basename(normalized).slice(0, 12)}…`
+    if (normalized.startsWith('versions/')) return `版本历史 ${normalized}`
+    if (normalized.startsWith('attachments/')) return `附件 ${path.basename(normalized)}`
+    return normalized
   }
 
   private async commitLocalChanges(message: string): Promise<void> {
@@ -350,6 +411,7 @@ export class SyncService {
     const status = await this.git.status()
     this.conflicts = await Promise.all(status.conflicted.map(async file => ({
       file,
+      displayName: this.conflictDisplayName(file),
       localContent: await this.readConflictStage(file, 2),
       remoteContent: await this.readConflictStage(file, 3),
       resolved: false,
@@ -484,31 +546,33 @@ export class SyncService {
 
   async getStatus(): Promise<SyncStatus> {
     if (!this.config?.enabled) {
-      return { lastSync: null, status: 'idle', message: '同步未配置' }
+      return { lastSync: this.lastSyncAt, status: 'idle', message: '同步未配置' }
     }
 
     if (this.operationActive) {
-      return { lastSync: null, status: 'syncing', message: '正在同步' }
+      return { lastSync: this.lastSyncAt, status: 'syncing', message: '正在同步' }
     }
 
-    if (this.config.provider === 'git' && this.git) {
+    if (this.git) {
       try {
         if (this.isRebaseInProgress()) {
           return {
-            lastSync: null,
+            lastSync: this.lastSyncAt,
             status: 'error',
             message: '检测到旧版同步遗留的 rebase，下次同步时将自动恢复。',
+            errorKind: 'other',
           }
         }
 
         const conflictStatus = await this.getConflictStatusIfPresent()
-        if (conflictStatus) return conflictStatus
+        if (conflictStatus) return { ...conflictStatus, lastSync: this.lastSyncAt, errorKind: 'conflict' }
 
         if (this.isMergeInProgress()) {
           return {
-            lastSync: null,
+            lastSync: this.lastSyncAt,
             status: 'error',
             message: 'Git merge 尚未完成，请重新执行同步以继续。',
+            errorKind: 'conflict',
           }
         }
 
@@ -516,20 +580,22 @@ export class SyncService {
         const hasChanges = status.files.length > 0
 
         return {
-          lastSync: null,
+          lastSync: this.lastSyncAt,
           status: 'idle',
           message: hasChanges ? `有 ${status.files.length} 个文件待同步` : '已同步',
         }
       } catch (error) {
+        const message = this.formatError(error)
         return {
-          lastSync: null,
+          lastSync: this.lastSyncAt,
           status: 'error',
-          message: `状态查询失败: ${this.formatError(error)}`,
+          message: `状态查询失败: ${message}`,
+          errorKind: this.classifyError(message),
         }
       }
     }
 
-    return { lastSync: null, status: 'idle', message: '就绪' }
+    return { lastSync: this.lastSyncAt, status: 'idle', message: '就绪' }
   }
 
   private successStatus(action: SyncAction): SyncStatus {
@@ -538,8 +604,9 @@ export class SyncService {
       auto: '自动同步成功',
     }
 
+    this.lastSyncAt = new Date().toISOString()
     return {
-      lastSync: new Date().toISOString(),
+      lastSync: this.lastSyncAt,
       status: 'success',
       message: messages[action],
     }

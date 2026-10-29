@@ -2,10 +2,12 @@ import crypto from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { simpleGit } from 'simple-git'
+import { embedHttpsCredentials, isValidGitRemoteUrl, stripEmbeddedCredentials } from './gitCredentials'
 
 export interface VaultRestoreRequest {
   repoUrl: string
   branch: string
+  httpsToken?: string
 }
 
 export interface VaultRestoreResult {
@@ -15,21 +17,22 @@ export interface VaultRestoreResult {
 
 interface VaultRestoreServiceOptions {
   cloneRepository?: (repoUrl: string, targetDir: string, branch: string) => Promise<void>
+  getHttpsToken?: () => string
 }
 
-const HTTPS_REPOSITORY = /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/i
-const SSH_REPOSITORY = /^git@github\.com:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\.git)?$/i
 const BRANCH_NAME = /^[A-Za-z0-9._/-]+$/
 
 export class VaultRestoreService {
   private readonly cloneRepository: (repoUrl: string, targetDir: string, branch: string) => Promise<void>
+  private readonly getHttpsToken?: () => string
   private restoreInProgress = false
 
   constructor(
     private readonly dataDir: string,
     options: VaultRestoreServiceOptions = {},
   ) {
-    this.cloneRepository = options.cloneRepository ?? this.cloneGithubRepository.bind(this)
+    this.cloneRepository = options.cloneRepository ?? this.cloneGitRepository.bind(this)
+    this.getHttpsToken = options.getHttpsToken
   }
 
   async restore(request: VaultRestoreRequest): Promise<VaultRestoreResult> {
@@ -53,7 +56,10 @@ export class VaultRestoreService {
         `.${path.basename(this.dataDir)}.restore-${process.pid}-${crypto.randomUUID()}`,
       )
 
-      await this.cloneRepository(repoUrl, stagingDir, branch)
+      const token = (request.httpsToken || this.getHttpsToken?.() || '').trim()
+      const cloneUrl = token ? embedHttpsCredentials(repoUrl, token) : repoUrl
+
+      await this.cloneRepository(cloneUrl, stagingDir, branch)
       this.validateRestoredVault(stagingDir)
       this.assertTargetIsEmpty()
 
@@ -81,9 +87,9 @@ export class VaultRestoreService {
   }
 
   private validateRepoUrl(value: string): string {
-    const repoUrl = value.trim()
-    if (!HTTPS_REPOSITORY.test(repoUrl) && !SSH_REPOSITORY.test(repoUrl)) {
-      throw new Error('请输入有效的 GitHub HTTPS 或 SSH 仓库地址')
+    const repoUrl = stripEmbeddedCredentials(value.trim())
+    if (!isValidGitRemoteUrl(repoUrl)) {
+      throw new Error('请输入有效的 Git HTTPS 或 SSH 仓库地址')
     }
     return repoUrl
   }
@@ -149,7 +155,7 @@ export class VaultRestoreService {
     }
   }
 
-  private async cloneGithubRepository(repoUrl: string, targetDir: string, branch: string): Promise<void> {
+  private async cloneGitRepository(repoUrl: string, targetDir: string, branch: string): Promise<void> {
     const env = { ...process.env }
     env.GIT_TERMINAL_PROMPT = '0'
     env.GIT_SSH_COMMAND = env.GIT_SSH_COMMAND
@@ -162,14 +168,14 @@ export class VaultRestoreService {
 
   private formatError(error: unknown): string {
     const message = error instanceof Error ? error.message : String(error)
-    if (/authentication|permission denied|publickey|could not read/i.test(message)) {
-      return 'GitHub 身份验证失败，请检查仓库权限或 SSH 密钥'
+    if (/authentication|permission denied|publickey|could not read|401|403/i.test(message)) {
+      return 'Git 身份验证失败，请检查仓库权限、SSH 密钥或 HTTPS 访问令牌'
     }
     if (/couldn't find remote ref|remote branch|not found/i.test(message)) {
       return '未找到指定仓库或分支'
     }
     if (/resolve host|network|timed out|timeout|connection/i.test(message)) {
-      return '无法连接 GitHub，请检查网络后重试'
+      return '无法连接远程仓库，请检查网络后重试'
     }
     return message
   }

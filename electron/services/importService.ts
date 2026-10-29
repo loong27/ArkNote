@@ -259,4 +259,113 @@ export class ImportService {
     this.fileManager.writeNoteContent(id, markdownContent)
     return note
   }
+
+  /**
+   * Recursively import a folder of Markdown files, mirroring relative directories.
+   * Optionally convert Obsidian [[wikilinks]] after all notes are imported.
+   */
+  importMarkdownFolder(
+    rootPath: string,
+    targetDirectoryId: string | null,
+    language: AppLanguage = 'zh-CN',
+    convertWikilinks = true,
+  ): { imported: number; noteIds: string[] } {
+    const titleToId = new Map<string, string>()
+    const noteIds: string[] = []
+    const dirCache = new Map<string, string | null>()
+    dirCache.set('', targetDirectoryId)
+
+    const ensureDir = (relDir: string): string | null => {
+      const normalized = relDir.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '')
+      if (dirCache.has(normalized)) return dirCache.get(normalized) ?? null
+      const parts = normalized.split('/').filter(Boolean)
+      let parentId: string | null = targetDirectoryId
+      let built = ''
+      for (const part of parts) {
+        built = built ? `${built}/${part}` : part
+        if (dirCache.has(built)) {
+          parentId = dirCache.get(built) ?? null
+          continue
+        }
+        const existing = this.fileManager.getMetadata().directories.find(
+          d => d.parentId === parentId && d.name === part,
+        )
+        if (existing) {
+          parentId = existing.id
+        } else {
+          const created = {
+            id: this.fileManager.generateId(),
+            name: part,
+            parentId,
+            order: this.fileManager.getMetadata().directories.filter(d => d.parentId === parentId).length,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          }
+          this.fileManager.addDirectory(created)
+          parentId = created.id
+        }
+        dirCache.set(built, parentId)
+      }
+      dirCache.set(normalized, parentId)
+      return parentId
+    }
+
+    const walk = (absDir: string, relDir: string) => {
+      for (const entry of fs.readdirSync(absDir, { withFileTypes: true })) {
+        if (entry.name.startsWith('.')) continue
+        const abs = path.join(absDir, entry.name)
+        const rel = relDir ? path.join(relDir, entry.name) : entry.name
+        if (entry.isDirectory()) {
+          walk(abs, rel)
+          continue
+        }
+        if (!/\.md$/i.test(entry.name)) continue
+        const relDir = path.dirname(rel).replace(/\\/g, '/')
+        const parentDirId = (!relDir || relDir === '.')
+          ? targetDirectoryId
+          : ensureDir(relDir)
+
+        let directoryId = parentDirId
+        if (!directoryId) {
+          const inboxName = translate(language, '导入')
+          let inbox = this.fileManager.getMetadata().directories.find(d => d.parentId === null && d.name === inboxName)
+          if (!inbox) {
+            inbox = {
+              id: this.fileManager.generateId(),
+              name: inboxName,
+              parentId: null,
+              order: this.fileManager.getMetadata().directories.filter(d => d.parentId === null).length,
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }
+            this.fileManager.addDirectory(inbox)
+          }
+          directoryId = inbox.id
+        }
+
+        const note = this.importMdFile(abs, directoryId, language)
+        titleToId.set(note.title, note.id)
+        noteIds.push(note.id)
+      }
+    }
+
+    walk(rootPath, '')
+
+    if (convertWikilinks) {
+      for (const noteId of noteIds) {
+        let content = this.fileManager.readNoteContent(noteId)
+        content = content.replace(/\[\[([^\]|#]+)(?:\|([^\]]+))?\]\]/g, (_m, target: string, alias?: string) => {
+          const title = String(target).trim()
+          const id = titleToId.get(title)
+            || this.fileManager.getMetadata().notes.find(n => n.title === title)?.id
+          if (!id) return alias ? String(alias) : title
+          const text = alias ? String(alias) : title
+          return `[${text}](arknote-link://${id})`
+        })
+        this.fileManager.writeNoteContent(noteId, content)
+      }
+    }
+
+    return { imported: noteIds.length, noteIds }
+  }
 }

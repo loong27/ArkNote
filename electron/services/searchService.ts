@@ -1,23 +1,22 @@
 import { FileManager } from './fileManager'
-import type { SearchResult, SearchMatch } from '../../src/types'
+import type { NoteMetadata, SearchResult, SearchMatch } from '../../src/types'
 
 const MAX_GLOBAL_MATCHES_PER_NOTE = 3
-const DEFAULT_GLOBAL_TOTAL_LIMIT = 20
+const DEFAULT_GLOBAL_TOTAL_LIMIT = 50
 
 type CachedSearchEntry = {
   noteId: string
   title: string
   titleLower: string
   directoryId: string
+  tags: string[]
   content: string
+  contentLower: string
 }
-
-const MAX_SEARCH_CACHE_ENTRIES = 200
 
 export class SearchService {
   private fileManager: FileManager
   private globalSearchCache: Map<string, CachedSearchEntry> = new Map()
-  private searchCacheOrder: string[] = []
 
   constructor(fileManager: FileManager) {
     this.fileManager = fileManager
@@ -25,13 +24,10 @@ export class SearchService {
 
   clearCache(): void {
     this.globalSearchCache.clear()
-    this.searchCacheOrder.length = 0
   }
 
   removeNote(noteId: string): void {
     this.globalSearchCache.delete(noteId)
-    const idx = this.searchCacheOrder.indexOf(noteId)
-    if (idx >= 0) this.searchCacheOrder.splice(idx, 1)
   }
 
   upsertNote(noteId: string): void {
@@ -42,59 +38,75 @@ export class SearchService {
       return
     }
 
-    // LRU eviction
-    if (!this.globalSearchCache.has(noteId) && this.searchCacheOrder.length >= MAX_SEARCH_CACHE_ENTRIES) {
-      const oldest = this.searchCacheOrder.shift()!
-      this.globalSearchCache.delete(oldest)
-    }
-
+    const content = this.fileManager.readNoteContent(noteId)
     this.globalSearchCache.set(noteId, {
       noteId,
       title: note.title,
       titleLower: note.title.toLowerCase(),
       directoryId: note.directoryId,
-      content: this.fileManager.readNoteContent(noteId),
+      tags: [...note.tags],
+      content,
+      contentLower: content.toLowerCase(),
     })
-
-    // Move to end (most recently used)
-    const idx = this.searchCacheOrder.indexOf(noteId)
-    if (idx >= 0) this.searchCacheOrder.splice(idx, 1)
-    this.searchCacheOrder.push(noteId)
   }
 
-  /**
-   * Global search across all notes or within specified directories
-   */
-  global(query: string, directoryIds?: string[], totalLimit: number = DEFAULT_GLOBAL_TOTAL_LIMIT): SearchResult[] {
+  ensureIndex(): void {
+    const meta = this.fileManager.getMetadata()
+    const liveIds = new Set(meta.notes.map(n => n.id))
+    for (const id of this.globalSearchCache.keys()) {
+      if (!liveIds.has(id)) this.globalSearchCache.delete(id)
+    }
+    for (const note of meta.notes) {
+      if (!this.globalSearchCache.has(note.id)) {
+        try {
+          this.upsertNote(note.id)
+        } catch {
+          this.removeNote(note.id)
+        }
+      }
+    }
+  }
+
+  global(
+    query: string,
+    directoryIds?: string[],
+    totalLimit: number = DEFAULT_GLOBAL_TOTAL_LIMIT,
+    tagIds?: string[],
+    offset = 0,
+  ): SearchResult[] {
     if (!query.trim()) return []
+    this.ensureIndex()
 
     const meta = this.fileManager.getMetadata()
     let notes = meta.notes
 
-    // Filter by directories if specified
     if (directoryIds && directoryIds.length > 0) {
-      // Get all sub-directory IDs recursively
       const allDirIds = new Set<string>()
       const addSubDirs = (dirId: string) => {
         allDirIds.add(dirId)
-        const subDirs = meta.directories.filter(d => d.parentId === dirId)
-        subDirs.forEach(d => addSubDirs(d.id))
+        meta.directories.filter(d => d.parentId === dirId).forEach(d => addSubDirs(d.id))
       }
       directoryIds.forEach(id => addSubDirs(id))
-
       notes = notes.filter(n => allDirIds.has(n.directoryId))
     }
 
-    const results: SearchResult[] = []
+    if (tagIds && tagIds.length > 0) {
+      const tagSet = new Set(tagIds)
+      notes = notes.filter(n => n.tags.some(t => tagSet.has(t)))
+    }
+
     const lowerQuery = query.toLowerCase()
+    const scored: Array<{ score: number; result: SearchResult }> = []
 
     for (const note of notes) {
       try {
         const cached = this.getOrCreateCachedEntry(note.id)
         const matches = this.findMatches(cached.content, query, lowerQuery, MAX_GLOBAL_MATCHES_PER_NOTE)
-
         const titleIdx = cached.titleLower.indexOf(lowerQuery)
+        let score = 0
+
         if (titleIdx !== -1) {
+          score += 100 - Math.min(50, titleIdx)
           matches.unshift({
             line: 0,
             column: titleIdx,
@@ -104,67 +116,95 @@ export class SearchService {
           })
         }
 
+        if (cached.contentLower.includes(lowerQuery)) {
+          score += Math.min(40, matches.length * 8 + 5)
+        }
+
+        // Chinese bigram soft boost: if query is CJK and any char appears in title
+        if (/[\u4e00-\u9fff]/.test(query) && [...query].some(ch => cached.titleLower.includes(ch))) {
+          score += 10
+        }
+
         const limitedMatches = matches.slice(0, MAX_GLOBAL_MATCHES_PER_NOTE)
-
         if (limitedMatches.length > 0) {
-          results.push({
-            noteId: note.id,
-            noteTitle: cached.title,
-            directoryId: cached.directoryId,
-            directoryPath: this.getDirectoryPath(cached.directoryId),
-            matches: limitedMatches,
+          scored.push({
+            score,
+            result: {
+              noteId: note.id,
+              noteTitle: cached.title,
+              directoryId: cached.directoryId,
+              directoryPath: this.getDirectoryPath(cached.directoryId),
+              matches: limitedMatches,
+            },
           })
-
-          if (results.length >= totalLimit) {
-            break
-          }
         }
       } catch {
         this.globalSearchCache.delete(note.id)
-        continue
       }
     }
 
+    scored.sort((a, b) => b.score - a.score || a.result.noteTitle.localeCompare(b.result.noteTitle))
+    const safeOffset = Math.max(0, offset)
+    const safeLimit = Math.min(500, Math.max(1, totalLimit))
+    return scored.slice(safeOffset, safeOffset + safeLimit).map(s => s.result)
+  }
+
+  byTitle(query: string, limit = 20): NoteMetadata[] {
+    this.ensureIndex()
+    const meta = this.fileManager.getMetadata()
+    const q = query.trim().toLowerCase()
+    const scored = meta.notes.map(note => {
+      const titleLower = note.title.toLowerCase()
+      let score = 0
+      if (!q) score = 1
+      else if (titleLower === q) score = 100
+      else if (titleLower.startsWith(q)) score = 80
+      else if (titleLower.includes(q)) score = 50
+      else if (/[\u4e00-\u9fff]/.test(q) && [...q].every(ch => titleLower.includes(ch))) score = 30
+      return { note, score }
+    }).filter(x => x.score > 0)
+
+    scored.sort((a, b) => b.score - a.score || b.note.updatedAt.localeCompare(a.note.updatedAt))
+    return scored.slice(0, Math.min(100, Math.max(1, limit))).map(x => x.note)
+  }
+
+  backlinks(noteId: string): NoteMetadata[] {
+    this.ensureIndex()
+    const meta = this.fileManager.getMetadata()
+    const needle = `arknote-link://${noteId}`
+    const results: NoteMetadata[] = []
+    for (const note of meta.notes) {
+      if (note.id === noteId) continue
+      try {
+        const cached = this.getOrCreateCachedEntry(note.id)
+        if (cached.content.includes(needle)) results.push(note)
+      } catch {
+        // skip
+      }
+    }
     return results
   }
 
-  /**
-   * Search within a specific note.
-   * HTML tags, markdown link/image URLs, and mermaid fenced code blocks
-   * are stripped before matching so that invisible content is not counted.
-   */
   inNote(noteId: string, query: string): SearchMatch[] {
     if (!query.trim()) return []
 
     const rawContent = this.fileManager.readNoteContent(noteId)
-    // Strip mermaid fenced code blocks (replaced by SVG at render time)
     let cleaned = rawContent.replace(/```mermaid[\s\S]*?```/g, '')
-    // Strip HTML tags
     cleaned = cleaned.replace(/<[^>]*>/g, '')
-    // Strip markdown image URLs: ![alt](url) → alt
     cleaned = cleaned.replace(/!\[([^\]]*)\]\([^)]+\)/g, '$1')
-    // Strip markdown link URLs: [text](url) → text
     cleaned = cleaned.replace(/\[([^\]]*)\]\([^)]+\)/g, '$1')
     return this.findMatches(cleaned, query, query.toLowerCase())
   }
 
   private getOrCreateCachedEntry(noteId: string): CachedSearchEntry {
     const cached = this.globalSearchCache.get(noteId)
-    if (cached) {
-      return cached
-    }
-
+    if (cached) return cached
     this.upsertNote(noteId)
     const refreshed = this.globalSearchCache.get(noteId)
-    if (!refreshed) {
-      throw new Error(`Search cache entry not found for note: ${noteId}`)
-    }
+    if (!refreshed) throw new Error(`Search cache entry not found for note: ${noteId}`)
     return refreshed
   }
 
-  /**
-   * Find all matches of query in content
-   */
   private findMatches(content: string, query: string, lowerQuery: string, limit?: number): SearchMatch[] {
     const matches: SearchMatch[] = []
     const lines = content.split('\n')
@@ -178,7 +218,6 @@ export class SearchService {
         const idx = lineLower.indexOf(lowerQuery, searchStart)
         if (idx === -1) break
 
-        // Build context: show the line with surrounding context
         const contextStart = Math.max(0, i - 1)
         const contextEnd = Math.min(lines.length - 1, i + 1)
         const context = lines.slice(contextStart, contextEnd + 1).join('\n')
@@ -191,10 +230,7 @@ export class SearchService {
           context,
         })
 
-        if (limit && matches.length >= limit) {
-          return matches
-        }
-
+        if (limit && matches.length >= limit) return matches
         searchStart = idx + 1
       }
     }
@@ -202,9 +238,6 @@ export class SearchService {
     return matches
   }
 
-  /**
-   * Build the full directory path string
-   */
   private getDirectoryPath(directoryId: string): string {
     const meta = this.fileManager.getMetadata()
     const parts: string[] = []

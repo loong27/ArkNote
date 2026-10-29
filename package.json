@@ -1,6 +1,6 @@
 {
   "name": "ark-note",
-  "version": "1.0.20",
+  "version": "1.0.21",
   "description": "A secure, cross-platform encrypted note-taking application",
   "author": {
     "name": "Eric",
@@ -23,7 +23,14 @@
     "test:markdown": "node scripts/test-markdown-renderer.mjs",
     "test:html-to-markdown": "node scripts/test-html-to-markdown.mjs",
     "test:website": "node scripts/test-website.mjs",
-    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:restore && npm run test:updater && npm run test:i18n && npm run test:sync && npm run test:markdown && npm run test:html-to-markdown && npm run test:website && vite build",
+    "test:vault-read": "node scripts/test-vault-read.mjs",
+    "test:cold-archive": "node scripts/test-cold-archive.mjs",
+    "android:keystore": "node scripts/gen-android-release-keystore.mjs",
+    "reader": "node reader/vault-reader.mjs",
+    "mobile:dev": "npm --prefix mobile run dev",
+    "mobile:build": "npm --prefix mobile run build",
+    "mobile:sync": "npm --prefix mobile run cap:sync",
+    "build": "npm run verify:icons && npm run test:brand && npm run test:auth && npm run test:restore && npm run test:updater && npm run test:i18n && npm run test:sync && npm run test:markdown && npm run test:html-to-markdown && npm run test:vault-read && npm run test:cold-archive && npm run test:website && vite build",
     "package": "npm run build && electron-builder",
     "package:win": "npm run build && electron-builder --win nsis --x64 --ia32",
     "package:mac": "npm run build && electron-builder --mac",

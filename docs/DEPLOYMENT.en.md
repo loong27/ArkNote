@@ -148,7 +148,8 @@ The workflow:
 1. Creates or reuses the corresponding GitHub Release
 2. Builds AppImage, DEB, and RPM packages on Ubuntu
 3. Builds x64 and ia32 NSIS installers on Windows
-4. Uploads packages, `latest*.yml`, and blockmaps
+4. Builds the read-only Android APK on Ubuntu (signed release if `ANDROID_KEYSTORE_*` secrets are set; otherwise a debug sideload APK)
+5. Uploads packages, `latest*.yml`, blockmaps, and the APK
 
 After publishing, the Release should contain at least:
 
@@ -160,6 +161,7 @@ Windows installer(s)
 AppImage
 DEB
 RPM
+arkNote-Reader-*-android*.apk
 ```
 
 Without `latest*.yml`, clients cannot discover an update. Without blockmaps, differential downloads are unavailable. A SHA-512 mismatch between metadata and the package causes the download to be rejected.
@@ -208,14 +210,18 @@ Platform support:
 
 ## 8. Code Signing
 
-Packages are unsigned by default. Public production distribution should configure:
+Desktop packages are unsigned by default. Public production distribution should configure:
 
 - A Windows Authenticode code-signing certificate
 - A macOS Developer ID Application certificate
 - macOS notarization credentials
 - Certificate and password secrets in CI
 
-Never commit `.p12`, `.pfx`, private keys, or passwords. Common certificate and key formats are excluded by `.gitignore`.
+Android Reader sideload does **not** require a release signature. For a stable identity run `npm run android:keystore -- --set-secrets`; the keystore stays in `~/.arknote-certs/` and is written to `ANDROID_KEYSTORE_*` secrets. Losing the keystore prevents same-signature upgrades.
+
+Cold backup uses S3-compatible path-style URLs. Settings include AWS / R2 / MinIO / OSS / COS endpoint presets, connection tests, and restore from a local cold file into an **empty** data directory.
+
+Never commit `.p12`, `.pfx`, `.jks`, private keys, or passwords. Common certificate and key formats are excluded by `.gitignore`.
 
 The updater verifies Release downloads over HTTPS and checks the SHA-512 value from `latest*.yml`, but integrity hashes do not replace operating-system code signing.
 

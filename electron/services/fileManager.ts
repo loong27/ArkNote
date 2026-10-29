@@ -55,7 +55,7 @@ export class FileManager {
   // ========== Initialization ==========
 
   ensureDirectories(): void {
-    const dirs = [this.notesDir, this.imagesDir, this.versionsDir]
+    const dirs = [this.notesDir, this.imagesDir, this.versionsDir, this.getAttachmentsDir()]
     for (const dir of dirs) {
       if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true })
@@ -70,7 +70,11 @@ export class FileManager {
 
     if (fs.existsSync(this.metadataPath)) {
       const content = this.encryption.decryptFileToString(this.metadataPath)
-      this.metadata = JSON.parse(content) as AppMetadata
+      const parsed = JSON.parse(content) as AppMetadata
+      parsed.syncConfig = this.sanitizeSyncConfig({
+        ...(parsed.syncConfig || {}),
+      })
+      this.metadata = parsed
     } else {
       this.metadata = this.createDefaultMetadata()
       this.saveMetadata()
@@ -99,19 +103,28 @@ export class FileManager {
       directories: [],
       notes: [],
       tags: [],
-      syncConfig: {
+      syncConfig: this.sanitizeSyncConfig({
         enabled: false,
         provider: 'git',
         repoUrl: '',
         branch: 'main',
-        ossEndpoint: '',
-        ossBucket: '',
-        ossAccessKey: '',
-        ossSecretKey: '',
-        ossRegion: '',
         autoSync: false,
         syncInterval: 30,
-      },
+      }),
+    }
+  }
+
+  /** Keep only Git fields in vault metadata — never store tokens or OSS secrets in the syncable tree. */
+  sanitizeSyncConfig(config: Partial<AppMetadata['syncConfig']> & Record<string, unknown>): AppMetadata['syncConfig'] {
+    return {
+      enabled: Boolean(config.enabled),
+      provider: 'git',
+      repoUrl: typeof config.repoUrl === 'string' ? config.repoUrl : '',
+      branch: typeof config.branch === 'string' && config.branch.trim() ? config.branch.trim() : 'main',
+      autoSync: Boolean(config.autoSync),
+      syncInterval: typeof config.syncInterval === 'number' && config.syncInterval > 0
+        ? Math.min(1440, Math.max(1, Math.round(config.syncInterval)))
+        : 30,
     }
   }
 
@@ -364,8 +377,89 @@ export class FileManager {
 
   updateSyncConfig(config: Partial<AppMetadata['syncConfig']>): void {
     const meta = this.getMetadata()
-    meta.syncConfig = { ...meta.syncConfig, ...config }
+    meta.syncConfig = this.sanitizeSyncConfig({ ...meta.syncConfig, ...config })
     this.saveMetadata()
+  }
+
+  updateTag(id: string, updates: Partial<Tag>): Tag | null {
+    const meta = this.getMetadata()
+    const idx = meta.tags.findIndex(t => t.id === id)
+    if (idx === -1) return null
+    meta.tags[idx] = { ...meta.tags[idx], ...updates }
+    this.saveMetadata()
+    return meta.tags[idx]
+  }
+
+  pruneVersions(noteId: string | undefined, shouldKeep: (fileName: string, isManual: boolean, mtimeMs: number) => boolean): number {
+    const targets = noteId
+      ? [noteId]
+      : (fs.existsSync(this.versionsDir)
+        ? fs.readdirSync(this.versionsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
+        : [])
+
+    let removed = 0
+    for (const id of targets) {
+      const dir = this.getVersionDir(id)
+      if (!fs.existsSync(dir)) continue
+      for (const file of fs.readdirSync(dir).filter(f => f.endsWith('.md.enc'))) {
+        const isManual = file.startsWith('manual_')
+        const full = path.join(dir, file)
+        const mtimeMs = fs.statSync(full).mtimeMs
+        if (!shouldKeep(file, isManual, mtimeMs)) {
+          fs.unlinkSync(full)
+          removed += 1
+        }
+      }
+    }
+    return removed
+  }
+
+  getAttachmentsDir(): string {
+    return path.join(this.dataDir, 'attachments')
+  }
+
+  ensureAttachmentsDir(): void {
+    const dir = this.getAttachmentsDir()
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  }
+
+  saveAttachment(data: Buffer, originalName: string): { id: string; name: string; fileName: string } {
+    this.ensureAttachmentsDir()
+    const id = crypto.randomUUID()
+    const safeName = path.basename(originalName).replace(/[^\w.\u4e00-\u9fff-]+/g, '_')
+    const fileName = `${id}__${safeName}.enc`
+    this.encryption.encryptFile(path.join(this.getAttachmentsDir(), fileName), data)
+    return { id, name: safeName, fileName }
+  }
+
+  listAttachmentsForNote(noteId: string, content: string): Array<{ id: string; name: string; mime: string }> {
+    const regex = /arknote-file:\/\/([a-f0-9-]{36})/gi
+    const ids = new Set<string>()
+    for (const match of content.matchAll(regex)) ids.add(match[1])
+    // Also scan attachment dir for notes that embed by id in frontmatter-like comments
+    void noteId
+    const results: Array<{ id: string; name: string; mime: string }> = []
+    this.ensureAttachmentsDir()
+    for (const file of fs.readdirSync(this.getAttachmentsDir())) {
+      const match = /^([a-f0-9-]{36})__(.+)\.enc$/i.exec(file)
+      if (!match || !ids.has(match[1])) continue
+      const ext = path.extname(match[2]).toLowerCase()
+      const mime = ext === '.pdf' ? 'application/pdf'
+        : ext === '.zip' ? 'application/zip'
+          : ext === '.txt' ? 'text/plain'
+            : 'application/octet-stream'
+      results.push({ id: match[1], name: match[2], mime })
+    }
+    return results
+  }
+
+  readAttachment(attachmentId: string): { buffer: Buffer; name: string } | null {
+    this.ensureAttachmentsDir()
+    const file = fs.readdirSync(this.getAttachmentsDir()).find(f => f.startsWith(`${attachmentId}__`) && f.endsWith('.enc'))
+    if (!file) return null
+    const match = /^[a-f0-9-]{36}__(.+)\.enc$/i.exec(file)
+    const name = match?.[1] || 'attachment'
+    return { buffer: this.encryption.decryptFile(path.join(this.getAttachmentsDir(), file)), name }
   }
 
   // ========== Utility ==========

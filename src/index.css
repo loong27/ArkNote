@@ -4957,6 +4957,19 @@ html, body, #root {
   border-bottom-style: solid;
 }
 
+.note-internal-link.note-link-broken {
+  color: var(--error);
+  text-decoration: line-through;
+  cursor: not-allowed;
+  border-bottom-color: var(--error);
+}
+
+.note-attachment-link {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--accent);
+}
+
 /* ================================================================
    NOTE VIEW — relative positioning for floating search
    ================================================================ */

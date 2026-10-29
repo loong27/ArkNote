@@ -1,4 +1,4 @@
-name: Package Desktop App
+name: Package Desktop & Android
 
 on:
   workflow_dispatch:
@@ -70,9 +70,114 @@ jobs:
               --repo "$GH_REPO" \
               --target "$GITHUB_SHA" \
               --title "$TAG_NAME" \
-              --notes "Automated desktop packages." \
+              --notes "Automated desktop and Android Reader packages." \
               --draft
           fi
+
+  android:
+    name: Android Reader APK
+    runs-on: ubuntu-22.04
+    needs: prepare-release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install mobile dependencies
+        working-directory: mobile
+        run: npm ci
+
+      - name: Build web assets and sync Capacitor
+        working-directory: mobile
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Decode Android keystore (optional)
+        id: keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/arknote-reader.jks"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 secret; building debug APK for sideload."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build signed release APK
+        if: steps.keystore.outputs.signed == 'true'
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleRelease --no-daemon \
+            -Pandroid.injected.signing.store.file="$RUNNER_TEMP/arknote-reader.jks" \
+            -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
+
+      - name: Build debug APK (unsigned release fallback)
+        if: steps.keystore.outputs.signed != 'true'
+        working-directory: mobile/android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      - name: Stage APK for upload
+        id: apk
+        env:
+          TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
+          SIGNED: ${{ steps.keystore.outputs.signed }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-mobile
+          if [ "$SIGNED" = "true" ]; then
+            src=$(find mobile/android/app/build/outputs/apk/release -name '*.apk' | head -n 1)
+            out="release-mobile/arkNote-Reader-${TAG_NAME}-android.apk"
+          else
+            src=$(find mobile/android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)
+            out="release-mobile/arkNote-Reader-${TAG_NAME}-android-debug.apk"
+          fi
+          if [ -z "${src:-}" ] || [ ! -f "$src" ]; then
+            echo "APK not found under mobile/android/app/build/outputs/apk"
+            find mobile/android/app/build/outputs -type f -name '*.apk' || true
+            exit 1
+          fi
+          cp "$src" "$out"
+          echo "path=$out" >> "$GITHUB_OUTPUT"
+          ls -lh "$out"
+
+      - name: Upload Android APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
+          APK_PATH: ${{ steps.apk.outputs.path }}
+        run: gh release upload "$TAG_NAME" "$APK_PATH" --repo "$GH_REPO" --clobber
 
   linux:
     name: Linux x64 packages
@@ -149,6 +254,10 @@ jobs:
         run: npm run build
 
       - name: Build Windows installers
+        # Optional code signing: set WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD repository secrets.
+        env:
+          CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
         run: npx electron-builder --win nsis --x64 --ia32 --publish never
 
       - name: Upload Windows installers to GitHub Release
@@ -169,6 +278,53 @@ jobs:
 
           gh release upload $env:TAG_NAME @files --repo $env:GH_REPO --clobber
 
+  macos:
+    name: macOS packages
+    runs-on: macos-14
+    needs: prepare-release
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer and Electron entry
+        run: npm run build
+
+      - name: Build macOS packages
+        # Unsigned by default. Set CSC_LINK / CSC_KEY_PASSWORD secrets to enable signing.
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.CSC_LINK != '' && 'true' || 'false' }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: npx electron-builder --mac dmg --x64 --arm64 --publish never
+
+      - name: Upload macOS packages to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ needs.prepare-release.outputs.tag_name }}
+        run: |
+          shopt -s nullglob
+          files=(release/*.dmg release/*.zip release/*.blockmap release/latest*.yml)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No macOS package files found."
+            exit 1
+          fi
+          gh release upload "$TAG_NAME" "${files[@]}" --repo "$GH_REPO" --clobber
+
   publish:
     name: Publish GitHub Release
     runs-on: ubuntu-22.04
@@ -176,6 +332,8 @@ jobs:
       - prepare-release
       - linux
       - windows
+      - macos
+      - android
     permissions:
       contents: write
 

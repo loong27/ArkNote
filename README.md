@@ -146,6 +146,12 @@ trash/
 | `npm run test:sync` | 运行 Git 同步集成测试 |
 | `npm run test:updater` | 验证 GitHub Release 更新配置 |
 | `npm run test:i18n` | 验证中英翻译键、参数插值和动态消息 |
+| `npm run test:vault-read` | 验证共享只读解密与搜索 |
+| `npm run test:cold-archive` | 验证冷备份 arknote-cold-v1 打包/解包 |
+| `npm run android:keystore` | 生成本机 Android 正式签名并可选写入 Secrets |
+| `npm run reader` | 只读 CLI（list / search / show） |
+| `npm run mobile:dev` | 启动只读移动端 Web 调试 |
+| `npm run mobile:build` | 构建只读移动端并可供 Capacitor 同步 |
 | `npm run brand:generate` | 从 SVG 母版重新生成品牌素材 |
 
 ## 项目结构
@@ -167,10 +173,13 @@ scripts/                  安全、同步、恢复、更新和素材测试
 
 ## 当前边界
 
-- 自动更新的 Windows 包默认未签名；面向公众分发时应配置代码签名证书。
-- macOS 已有本地构建配置，但当前 GitHub Actions 尚未发布 macOS 安装包。
+- 自动更新的 Windows 包默认未签名；面向公众分发时应配置 `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` 仓库密钥。
+- GitHub Actions 会构建 macOS DMG（默认未公证）；可用 `CSC_LINK` / `CSC_KEY_PASSWORD` 启用签名。
+- 同一工作流会构建只读 Android APK。侧载可用 debug 包；正式签名：`npm run android:keystore -- --set-secrets`（keystore 在本机 `~/.arknote-certs/`，不入库）。
 - Linux DEB 与 RPM 由系统包管理器负责升级，不执行应用内替换。
-- OSS 配置界面仍处于预留状态，当前稳定同步路径是 Git。
+- 实时同步仅支持 Git。对象存储冷备份可测连、可从本地 cold 文件恢复到空目录；凭证只存本机。
+- 时间胶囊可按月打开笔记；编辑器 `[[` 支持键盘补全。
+- 只读客户端：CLI 见 [`reader/README.md`](./reader/README.md)；手机 App 见 [`mobile/README.md`](./mobile/README.md)。
 
 ## 仓库
 

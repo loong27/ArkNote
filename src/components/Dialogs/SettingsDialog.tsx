@@ -54,11 +54,7 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     provider: 'git',
     repoUrl: '',
     branch: 'main',
-    ossEndpoint: '',
-    ossBucket: '',
-    ossAccessKey: '',
-    ossSecretKey: '',
-    ossRegion: '',
+    httpsToken: '',
     autoSync: false,
     syncInterval: 30,
   })
@@ -66,22 +62,41 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
   const [syncMessage, setSyncMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' })
   const [syncing, setSyncing] = useState(false)
   const [conflicts, setConflicts] = useState<SyncConflict[]>([])
+  const [vaultMessage, setVaultMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' })
+  const [integrityText, setIntegrityText] = useState('')
+  const [editorFontSize, setEditorFontSize] = useState(16)
+  const [editorDefaultView, setEditorDefaultView] = useState<'edit' | 'preview' | 'split'>('split')
+  const [coldBackup, setColdBackup] = useState({
+    enabled: false,
+    endpoint: '',
+    bucket: '',
+    region: '',
+    accessKeyId: '',
+    secretAccessKey: '',
+    prefix: 'arknote-cold',
+    intervalHours: 24,
+    lastBackupAt: null as string | null,
+    lastError: null as string | null,
+  })
+  const [coldMessage, setColdMessage] = useState<{ type: 'success' | 'error' | ''; text: string }>({ type: '', text: '' })
+  const [coldBusy, setColdBusy] = useState(false)
 
   // Active tab
-  const [activeTab, setActiveTab] = useState<'storage' | 'password' | 'general' | 'sync'>('general')
+  const [activeTab, setActiveTab] = useState<'storage' | 'password' | 'general' | 'sync' | 'backup'>('general')
 
   // Load config on open
   useEffect(() => {
     if (!open) return
     const loadConfig = async () => {
       try {
-        const [config, action, sConfig, sStatus, authStatus, appUpdate] = await Promise.all([
+        const [config, action, sConfig, sStatus, authStatus, appUpdate, cold] = await Promise.all([
           window.electronAPI.config.getAll(),
           window.electronAPI.window.getCloseAction(),
           window.electronAPI.sync.getConfig(),
           window.electronAPI.sync.getStatus(),
           window.electronAPI.auth.getUnlockStatus(),
           window.electronAPI.updates.getState(),
+          window.electronAPI.coldBackup.getConfig(),
         ])
         setDataDir(config.dataDir)
         setDefaultDataDir(config.defaultDataDir)
@@ -90,12 +105,23 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
         setCloseAction(action)
         setAutoLockMinutes(config.autoLockMinutes)
         setLockOnMinimize(config.lockOnMinimize)
+        setEditorFontSize(config.editorFontSize || 16)
+        setEditorDefaultView(config.editorDefaultView || 'split')
         const currentTime = Date.now()
         setPwdNow(currentTime)
         setPwdRetryUntil(currentTime + authStatus.retryAfterMs)
-        setSyncConfig(sConfig)
+        setSyncConfig({
+          enabled: sConfig.enabled,
+          provider: 'git',
+          repoUrl: sConfig.repoUrl || '',
+          branch: sConfig.branch || 'main',
+          httpsToken: sConfig.httpsToken || '',
+          autoSync: sConfig.autoSync,
+          syncInterval: sConfig.syncInterval,
+        })
         setSyncStatus(sStatus)
         setUpdateState(appUpdate)
+        setColdBackup(cold)
         if (sStatus.conflicts && sStatus.conflicts.length > 0) {
           setConflicts(sStatus.conflicts)
         }
@@ -270,14 +296,18 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
     setSyncing(true)
     setSyncMessage({ type: '', text: '' })
     try {
-      const hasGitConfig = syncConfig.provider === 'git' && syncConfig.repoUrl.trim() !== ''
-      const hasOssConfig = syncConfig.provider === 'oss' && syncConfig.ossEndpoint.trim() !== '' && syncConfig.ossBucket.trim() !== ''
-      const configToSave = { ...syncConfig, enabled: hasGitConfig || hasOssConfig }
+      const hasGitConfig = syncConfig.repoUrl.trim() !== ''
+      const configToSave: SyncConfig = {
+        ...syncConfig,
+        provider: 'git',
+        enabled: hasGitConfig,
+      }
       setSyncConfig(configToSave)
       await window.electronAPI.sync.configure(configToSave)
       const status = await window.electronAPI.sync.getStatus()
       setSyncStatus(status)
       setConflicts(status.conflicts ?? [])
+      useStore.getState().setSyncStatus(status)
       setSyncMessage({
         type: status.status === 'error' ? 'error' : 'success',
         text: status.status === 'error' ? t(status.message) : t('同步配置已保存'),
@@ -286,6 +316,108 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
       setSyncMessage({ type: 'error', text: t('配置失败: {message}', { message: error instanceof Error ? error.message : String(error) }) })
     }
     setSyncing(false)
+  }
+
+  const handleExportVault = async () => {
+    setVaultMessage({ type: '', text: '' })
+    const result = await window.electronAPI.vault.exportBackup()
+    setVaultMessage({
+      type: result.success ? 'success' : result.canceled ? '' : 'error',
+      text: result.canceled ? '' : t(result.message),
+    })
+  }
+
+  const handleVerifyIntegrity = async () => {
+    setVaultMessage({ type: '', text: '' })
+    const report = await window.electronAPI.vault.verifyIntegrity()
+    const summary = report.ok
+      ? t('仓库完整性正常：笔记 {notesOk}/{notesChecked}，图片 {imagesOk}/{imagesChecked}', {
+        notesOk: report.notesOk,
+        notesChecked: report.notesChecked,
+        imagesOk: report.imagesOk,
+        imagesChecked: report.imagesChecked,
+      })
+      : t('发现 {count} 个问题', { count: report.issues.length })
+    setIntegrityText([
+      summary,
+      ...report.issues.slice(0, 8).map(i => `• [${i.severity}] ${i.message}`),
+    ].join('\n'))
+    setVaultMessage({ type: report.ok ? 'success' : 'error', text: summary })
+  }
+
+  const handleSaveEditorPrefs = async () => {
+    await window.electronAPI.notesExtras.setEditorPrefs({
+      fontSize: editorFontSize,
+      defaultView: editorDefaultView,
+    })
+  }
+
+  const applyColdPreset = (preset: string) => {
+    if (preset === 'aws') {
+      setColdBackup({ ...coldBackup, endpoint: 'https://s3.amazonaws.com', region: 'us-east-1' })
+    } else if (preset === 'r2') {
+      setColdBackup({ ...coldBackup, endpoint: 'https://<accountid>.r2.cloudflarestorage.com', region: 'auto' })
+    } else if (preset === 'minio') {
+      setColdBackup({ ...coldBackup, endpoint: 'http://127.0.0.1:9000', region: 'us-east-1' })
+    } else if (preset === 'oss') {
+      setColdBackup({ ...coldBackup, endpoint: 'https://oss-cn-hangzhou.aliyuncs.com', region: 'oss-cn-hangzhou' })
+    } else if (preset === 'cos') {
+      setColdBackup({ ...coldBackup, endpoint: 'https://cos.ap-guangzhou.myqcloud.com', region: 'ap-guangzhou' })
+    }
+  }
+
+  const formatColdResult = (result: { success: boolean; message: string; detail?: string }) => {
+    if (result.success) return result.message
+    return result.detail ? `${result.message}\n${result.detail}` : result.message
+  }
+
+  const handleSaveColdBackup = async () => {
+    setColdMessage({ type: '', text: '' })
+    try {
+      const saved = await window.electronAPI.coldBackup.setConfig(coldBackup)
+      setColdBackup(saved)
+      setColdMessage({ type: 'success', text: t('冷备份配置已保存（凭证仅存本机）') })
+    } catch (error) {
+      setColdMessage({ type: 'error', text: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  const handleRunColdBackup = async () => {
+    setColdMessage({ type: '', text: '' })
+    setColdBusy(true)
+    try {
+      const result = await window.electronAPI.coldBackup.runNow()
+      setColdMessage({ type: result.success ? 'success' : 'error', text: formatColdResult(result) })
+      setColdBackup(await window.electronAPI.coldBackup.getConfig())
+    } finally {
+      setColdBusy(false)
+    }
+  }
+
+  const handleTestColdBackup = async () => {
+    setColdMessage({ type: '', text: '' })
+    setColdBusy(true)
+    try {
+      await window.electronAPI.coldBackup.setConfig(coldBackup)
+      const result = await window.electronAPI.coldBackup.testConnection()
+      setColdMessage({ type: result.success ? 'success' : 'error', text: formatColdResult(result) })
+      setColdBackup(await window.electronAPI.coldBackup.getConfig())
+    } finally {
+      setColdBusy(false)
+    }
+  }
+
+  const handleRestoreColdBackup = async () => {
+    const ok = window.confirm(t('仅可恢复到空数据目录。若当前目录已有笔记，请先更换空目录或备份后再试。继续？'))
+    if (!ok) return
+    setColdMessage({ type: '', text: '' })
+    setColdBusy(true)
+    try {
+      const result = await window.electronAPI.coldBackup.restoreFromFile()
+      setColdMessage({ type: result.success ? 'success' : 'error', text: formatColdResult(result) })
+    } finally {
+      setColdBusy(false)
+    }
   }
 
   const handleSync = async () => {
@@ -399,6 +531,14 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
             <GitBranch size={15} strokeWidth={SW} />
             <span>{t('同步')}</span>
           </button>
+          <button
+            className={`sidebar-tab ${activeTab === 'backup' ? 'active' : ''}`}
+            onClick={() => setActiveTab('backup')}
+            style={{ flex: 'none', padding: '6px 14px', borderBottom: 'none' }}
+          >
+            <Cloud size={15} strokeWidth={SW} />
+            <span>{t('备份')}</span>
+          </button>
         </div>
 
         <div className="dialog-body" style={{ minHeight: '320px' }}>
@@ -438,6 +578,36 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   >
                     {t('暗夜模式')}
                   </button>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
+                  {t('编辑器')}
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+                  {t('字号与默认视图会保存在本机配置中。')}
+                </p>
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+                  <label style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('字号')}</label>
+                  <input
+                    type="number"
+                    min={12}
+                    max={28}
+                    value={editorFontSize}
+                    onChange={(e) => setEditorFontSize(parseInt(e.target.value) || 16)}
+                    style={{ width: 64, padding: '6px 8px', background: 'var(--bg-primary)', border: '0.5px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)' }}
+                  />
+                  <select
+                    value={editorDefaultView}
+                    onChange={(e) => setEditorDefaultView(e.target.value as 'edit' | 'preview' | 'split')}
+                    style={{ padding: '6px 8px', background: 'var(--bg-primary)', border: '0.5px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)' }}
+                  >
+                    <option value="edit">{t('仅编辑')}</option>
+                    <option value="preview">{t('仅预览')}</option>
+                    <option value="split">{t('分栏')}</option>
+                  </select>
+                  <button className="btn" onClick={handleSaveEditorPrefs}>{t('保存')}</button>
                 </div>
               </div>
 
@@ -850,164 +1020,70 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                   {t('同步配置')}
                 </h4>
                 <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.6 }}>
-                  {t('配置远程仓库或 OSS 来同步你的加密笔记数据。')}
+                  {t('Git 是当前唯一稳定同步方式。对象存储请使用「备份」页的加密冷备份，不会做双向同步。')}
                 </p>
+                <ol style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 16, paddingLeft: 18, lineHeight: 1.7 }}>
+                  <li>{t('在 GitHub/GitLab 创建私有空仓库')}</li>
+                  <li>{t('粘贴 HTTPS 或 SSH 地址；HTTPS 私有库请填写访问令牌')}</li>
+                  <li>{t('保存配置后点击「立即同步」')}</li>
+                </ol>
 
-                {/* Provider selection */}
-                <div style={{ marginBottom: 16 }}>
-                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 6, display: 'block' }}>
-                    {t('同步方式')}
-                  </label>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      className={`btn ${syncConfig.provider === 'git' ? 'btn-primary' : ''}`}
-                      onClick={() => setSyncConfig({ ...syncConfig, provider: 'git' })}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}
-                    >
-                      <GitBranch size={14} strokeWidth={1.5} /> GitHub / GitLab
-                    </button>
-                    <button
-                      className={`btn ${syncConfig.provider === 'oss' ? 'btn-primary' : ''}`}
-                      onClick={() => setSyncConfig({ ...syncConfig, provider: 'oss' })}
-                      style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'center' }}
-                    >
-                      <Cloud size={14} strokeWidth={1.5} /> {t('OSS 对象存储')}
-                    </button>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
+                      {t('仓库地址（HTTPS 或 SSH）')}
+                    </label>
+                    <input
+                      type="text"
+                      value={syncConfig.repoUrl}
+                      onChange={(e) => setSyncConfig({ ...syncConfig, repoUrl: e.target.value })}
+                      placeholder={t('https://github.com/user/repo.git 或 git@github.com:user/repo.git')}
+                      style={{
+                        width: '100%', padding: '10px 14px',
+                        background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
+                        borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
+                        fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
+                      {t('分支名称')}
+                    </label>
+                    <input
+                      type="text"
+                      value={syncConfig.branch}
+                      onChange={(e) => setSyncConfig({ ...syncConfig, branch: e.target.value })}
+                      placeholder="main"
+                      style={{
+                        width: '100%', padding: '10px 14px',
+                        background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
+                        borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
+                        fontSize: '13px', outline: 'none',
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
+                      {t('HTTPS 访问令牌（可选，仅存本机）')}
+                    </label>
+                    <input
+                      type="password"
+                      value={syncConfig.httpsToken || ''}
+                      onChange={(e) => setSyncConfig({ ...syncConfig, httpsToken: e.target.value })}
+                      placeholder={t('GitHub PAT / GitLab Token')}
+                      style={{
+                        width: '100%', padding: '10px 14px',
+                        background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
+                        borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
+                        fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none',
+                      }}
+                    />
+                    <p style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: 6 }}>
+                      {t('令牌保存在 ~/.ark-note-config.json，不会写入加密仓库或 Git 远端。')}
+                    </p>
                   </div>
                 </div>
-
-                {/* Git config */}
-                {syncConfig.provider === 'git' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                        {t('仓库地址（HTTPS 或 SSH）')}
-                      </label>
-                      <input
-                        type="text"
-                        value={syncConfig.repoUrl}
-                        onChange={(e) => setSyncConfig({ ...syncConfig, repoUrl: e.target.value })}
-                        placeholder={t('https://github.com/user/repo.git 或 git@github.com:user/repo.git')}
-                        style={{
-                          width: '100%', padding: '10px 14px',
-                          background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
-                          borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
-                          fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none',
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                        {t('分支名称')}
-                      </label>
-                      <input
-                        type="text"
-                        value={syncConfig.branch}
-                        onChange={(e) => setSyncConfig({ ...syncConfig, branch: e.target.value })}
-                        placeholder="main"
-                        style={{
-                          width: '100%', padding: '10px 14px',
-                          background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
-                          borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
-                          fontSize: '13px', outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* OSS config */}
-                {syncConfig.provider === 'oss' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                        Endpoint
-                      </label>
-                      <input
-                        type="text"
-                        value={syncConfig.ossEndpoint}
-                        onChange={(e) => setSyncConfig({ ...syncConfig, ossEndpoint: e.target.value })}
-                        placeholder="https://oss-cn-hangzhou.aliyuncs.com"
-                        style={{
-                          width: '100%', padding: '10px 14px',
-                          background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
-                          borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
-                          fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none',
-                        }}
-                      />
-                    </div>
-                    <div style={{ display: 'flex', gap: 12 }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                          {t('Bucket 名称')}
-                        </label>
-                        <input
-                          type="text"
-                          value={syncConfig.ossBucket}
-                          onChange={(e) => setSyncConfig({ ...syncConfig, ossBucket: e.target.value })}
-                          placeholder="my-notes-bucket"
-                          style={{
-                            width: '100%', padding: '10px 14px',
-                            background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
-                            borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
-                            fontSize: '13px', outline: 'none',
-                          }}
-                        />
-                      </div>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                          Region
-                        </label>
-                        <input
-                          type="text"
-                          value={syncConfig.ossRegion}
-                          onChange={(e) => setSyncConfig({ ...syncConfig, ossRegion: e.target.value })}
-                          placeholder="oss-cn-hangzhou"
-                          style={{
-                            width: '100%', padding: '10px 14px',
-                            background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
-                            borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
-                            fontSize: '13px', outline: 'none',
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                        Access Key ID
-                      </label>
-                      <input
-                        type="text"
-                        value={syncConfig.ossAccessKey}
-                        onChange={(e) => setSyncConfig({ ...syncConfig, ossAccessKey: e.target.value })}
-                        placeholder="LTAI5t..."
-                        style={{
-                          width: '100%', padding: '10px 14px',
-                          background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
-                          borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
-                          fontSize: '13px', fontFamily: 'var(--font-mono)', outline: 'none',
-                        }}
-                      />
-                    </div>
-                    <div>
-                      <label style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 4, display: 'block' }}>
-                        Access Key Secret
-                      </label>
-                      <input
-                        type="password"
-                        value={syncConfig.ossSecretKey}
-                        onChange={(e) => setSyncConfig({ ...syncConfig, ossSecretKey: e.target.value })}
-                        placeholder="••••••••"
-                        style={{
-                          width: '100%', padding: '10px 14px',
-                          background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
-                          borderRadius: 'var(--radius-md)', color: 'var(--text-primary)',
-                          fontSize: '13px', outline: 'none',
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
 
                 {/* Auto sync */}
                 <div style={{
@@ -1122,9 +1198,14 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                             border: '0.5px solid var(--border)', background: 'var(--bg-primary)',
                           }}
                         >
-                          <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
-                            {conflict.file}
+                          <div style={{ fontSize: '13px', color: 'var(--text-primary)', marginBottom: 4, fontWeight: 600 }}>
+                            {conflict.displayName || conflict.file}
                           </div>
+                          {conflict.displayName && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginBottom: 8, fontFamily: 'var(--font-mono)' }}>
+                              {conflict.file}
+                            </div>
+                          )}
                           <div style={{ display: 'flex', gap: 8 }}>
                             <button
                               className={`btn btn-sm ${conflict.resolution === 'local' ? 'btn-primary' : ''}`}
@@ -1161,6 +1242,132 @@ export const SettingsDialog: React.FC<Props> = ({ open, onClose }) => {
                       {syncing ? t('处理中...') : t('解决冲突并继续同步')}
                     </button>
                   </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ===== Backup Tab ===== */}
+          {activeTab === 'backup' && (
+            <div>
+              <div style={{ marginBottom: 24 }}>
+                <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
+                  {t('加密仓库备份')}
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+                  {t('导出整份密文仓库到 U 盘或其它位置。备份仍需原密码才能解锁。')}
+                </p>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                  <button className="btn btn-primary" onClick={handleExportVault} style={{ flex: 1 }}>
+                    {t('导出加密备份')}
+                  </button>
+                  <button className="btn" onClick={handleVerifyIntegrity} style={{ flex: 1 }}>
+                    {t('验证仓库完整性')}
+                  </button>
+                </div>
+                {vaultMessage.text && (
+                  <div style={{
+                    padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: '13px', marginBottom: 12,
+                    background: vaultMessage.type === 'success' ? '#a6e3a122' : '#f38ba822',
+                    color: vaultMessage.type === 'success' ? 'var(--success)' : 'var(--error)',
+                  }}>
+                    {vaultMessage.text}
+                  </div>
+                )}
+                {integrityText && (
+                  <pre style={{
+                    whiteSpace: 'pre-wrap', fontSize: 12, padding: 12, borderRadius: 8,
+                    background: 'var(--bg-primary)', border: '0.5px solid var(--border)',
+                    color: 'var(--text-secondary)', maxHeight: 160, overflow: 'auto',
+                  }}>{integrityText}</pre>
+                )}
+              </div>
+
+              <div style={{ marginBottom: 16 }}>
+                <h4 style={{ fontSize: '14px', marginBottom: 8, color: 'var(--text-primary)' }}>
+                  {t('对象存储冷备份')}
+                </h4>
+                <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+                  {t('定时上传密文快照到 S3 兼容存储。这不是实时同步；凭证只保存在本机配置。')}
+                </p>
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+                  {t('使用 path-style：Endpoint/Bucket/对象键。可先选厂商预设再改成你的真实 Endpoint。')}
+                </p>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13 }}>
+                  <input
+                    type="checkbox"
+                    checked={coldBackup.enabled}
+                    onChange={(e) => setColdBackup({ ...coldBackup, enabled: e.target.checked })}
+                  />
+                  {t('启用定时冷备份')}
+                </label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      if (e.target.value) applyColdPreset(e.target.value)
+                      e.target.value = ''
+                    }}
+                    style={{
+                      width: '100%', padding: '8px 12px', background: 'var(--bg-primary)',
+                      border: '0.5px solid var(--border)', borderRadius: 'var(--radius-md)',
+                      color: 'var(--text-primary)', fontSize: 13,
+                    }}
+                  >
+                    <option value="" disabled>{t('厂商预设（填充 Endpoint / Region）')}</option>
+                    <option value="aws">AWS S3</option>
+                    <option value="r2">Cloudflare R2</option>
+                    <option value="minio">MinIO</option>
+                    <option value="oss">阿里云 OSS</option>
+                    <option value="cos">腾讯云 COS</option>
+                  </select>
+                  {(['endpoint', 'bucket', 'region', 'accessKeyId', 'secretAccessKey', 'prefix'] as const).map((key) => (
+                    <input
+                      key={key}
+                      type={key === 'secretAccessKey' ? 'password' : 'text'}
+                      value={coldBackup[key]}
+                      onChange={(e) => setColdBackup({ ...coldBackup, [key]: e.target.value })}
+                      placeholder={key}
+                      style={{
+                        width: '100%', padding: '8px 12px', background: 'var(--bg-primary)',
+                        border: '0.5px solid var(--border)', borderRadius: 'var(--radius-md)',
+                        color: 'var(--text-primary)', fontSize: 13, fontFamily: 'var(--font-mono)',
+                      }}
+                    />
+                  ))}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--text-muted)', flexWrap: 'wrap' }}>
+                    <span>{t('间隔（小时）')}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      max={168}
+                      value={coldBackup.intervalHours}
+                      onChange={(e) => setColdBackup({ ...coldBackup, intervalHours: parseInt(e.target.value) || 24 })}
+                      style={{ width: 72, padding: '6px 8px', background: 'var(--bg-primary)', border: '0.5px solid var(--border)', borderRadius: 6, color: 'var(--text-primary)' }}
+                    />
+                    {coldBackup.lastBackupAt && (
+                      <span>{t('上次: {date}', { date: new Date(coldBackup.lastBackupAt).toLocaleString(locale) })}</span>
+                    )}
+                  </div>
+                  {coldBackup.lastError && (
+                    <div style={{ fontSize: 12, color: 'var(--error)', lineHeight: 1.5 }}>
+                      {t('上次失败')}: {coldBackup.lastError}
+                    </div>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  <button className="btn btn-primary" disabled={coldBusy} onClick={() => void handleSaveColdBackup()} style={{ flex: 1 }}>{t('保存冷备份配置')}</button>
+                  <button className="btn" disabled={coldBusy} onClick={() => void handleTestColdBackup()} style={{ flex: 1 }}>{t('测试连接')}</button>
+                  <button className="btn" disabled={coldBusy} onClick={() => void handleRunColdBackup()} style={{ flex: 1 }}>{t('立即冷备份')}</button>
+                  <button className="btn" disabled={coldBusy} onClick={() => void handleRestoreColdBackup()} style={{ flex: 1 }}>{t('从冷备份文件恢复')}</button>
+                </div>
+                {coldMessage.text && (
+                  <div style={{
+                    marginTop: 12, padding: '10px 14px', borderRadius: 'var(--radius-md)', fontSize: 13,
+                    whiteSpace: 'pre-wrap',
+                    background: coldMessage.type === 'success' ? '#a6e3a122' : '#f38ba822',
+                    color: coldMessage.type === 'success' ? 'var(--success)' : 'var(--error)',
+                  }}>{coldMessage.text}</div>
                 )}
               </div>
             </div>

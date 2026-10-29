@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import ReactDOM from 'react-dom'
-import { Columns2, Edit3, Eye, Save, ChevronRight, X, Copy, Check } from 'lucide-react'
+import { Columns2, Edit3, Eye, Save, ChevronRight, X, Copy, Check, Pin, Paperclip, ListTree } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import mermaid from 'mermaid'
 import { useStore } from '../../store/useStore'
@@ -198,9 +198,44 @@ export const NoteView: React.FC = () => {
   const previewPaneRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
   const [editorReadyTick, setEditorReadyTick] = useState(0)
+  const [outline, setOutline] = useState<Array<{ level: number; text: string; line: number }>>([])
+  const [backlinks, setBacklinks] = useState<Array<{ id: string; title: string }>>([])
+  const [showOutline, setShowOutline] = useState(true)
+  const [editorFontSize, setEditorFontSize] = useState(16)
+  const [pinned, setPinned] = useState(false)
   const showEditor = isEditing && !isTrashNote
   const showPreview = isTrashNote || !isEditing || livePreview
   const isSplitView = showEditor && showPreview
+
+  useEffect(() => {
+    void window.electronAPI.notesExtras.getEditorPrefs().then((prefs) => {
+      setEditorFontSize(prefs.fontSize)
+      if (!isTrashNote) {
+        if (prefs.defaultView === 'edit') {
+          setIsEditing(true)
+          setLivePreview(false)
+        } else if (prefs.defaultView === 'preview') {
+          setIsEditing(false)
+        } else {
+          setIsEditing(true)
+          setLivePreview(true)
+        }
+      }
+    }).catch(() => undefined)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!currentNote || isTrashNote) {
+      setOutline([])
+      setBacklinks([])
+      return
+    }
+    void window.electronAPI.notesExtras.getOutline(currentNote.id).then(setOutline).catch(() => setOutline([]))
+    void window.electronAPI.search.backlinks(currentNote.id)
+      .then(notes => setBacklinks(notes.map(n => ({ id: n.id, title: n.title }))))
+      .catch(() => setBacklinks([]))
+    void window.electronAPI.notesExtras.getPinned().then(ids => setPinned(ids.includes(currentNote.id)))
+  }, [currentNote?.id, content, isTrashNote])
 
   // Update mermaid theme when app theme changes
   useEffect(() => {
@@ -357,10 +392,19 @@ export const NoteView: React.FC = () => {
 
         if (cancelled) return
 
+        const noteById = useStore.getState().noteById
         const noteLinkRegex = /\[([^\]]*)\]\(arknote-link:\/\/([^)]+)\)/g
         processedContent = processedContent.replace(noteLinkRegex, (_match, text, noteId) => {
-          return `<a href="#" class="note-internal-link" data-note-id="${noteId}">${text}</a>`
+          const exists = noteById.has(noteId)
+          const brokenClass = exists ? '' : ' note-link-broken'
+          return `<a href="#" class="note-internal-link${brokenClass}" data-note-id="${noteId}"${exists ? '' : ' title="链接目标不存在"'}>${text}</a>`
         })
+
+        // Attachments
+        processedContent = processedContent.replace(
+          /\[([^\]]*)\]\(arknote-file:\/\/([a-f0-9-]{36})\)/gi,
+          (_m, text, id) => `<a href="#" class="note-attachment-link" data-attachment-id="${id}">${text}</a>`,
+        )
 
         if (cancelled) return
         const html = renderMarkdown(processedContent)
@@ -659,10 +703,24 @@ export const NoteView: React.FC = () => {
         e.preventDefault()
         e.stopPropagation()
         const noteId = anchor.getAttribute('data-note-id')
-        if (noteId) {
+        if (noteId && !anchor.classList.contains('note-link-broken')) {
           openNote(noteId)
         }
         return
+      }
+
+      if (anchor.classList.contains('note-attachment-link')) {
+        e.preventDefault()
+        e.stopPropagation()
+        const attachmentId = anchor.getAttribute('data-attachment-id')
+        if (attachmentId) void window.electronAPI.notesExtras.openAttachment(attachmentId)
+        return
+      }
+
+      // Task list checkbox write-back
+      const checkbox = target.closest('input[type="checkbox"]') as HTMLInputElement | null
+      if (checkbox && preview.contains(checkbox) && !isTrashNote) {
+        // handled in change listener below
       }
 
       // External URL: open in default browser
@@ -671,6 +729,29 @@ export const NoteView: React.FC = () => {
         e.preventDefault()
         e.stopPropagation()
         window.electronAPI.window.openExternal(href)
+      }
+    }
+
+    const handleChange = (e: Event) => {
+      const checkbox = e.target as HTMLInputElement
+      if (!checkbox || checkbox.type !== 'checkbox' || isTrashNote || !currentNote) return
+      const listItem = checkbox.closest('li')
+      if (!listItem) return
+      const items = Array.from(preview.querySelectorAll('.task-list-item, li.task-list-item, li'))
+        .filter(li => li.querySelector('input[type="checkbox"]'))
+      const index = items.indexOf(listItem)
+      if (index < 0) return
+
+      let seen = -1
+      const next = latestContentRef.current.replace(/^(\s*[-*+]\s+)\[([ xX])\]/gm, (full, prefix, mark) => {
+        seen += 1
+        if (seen !== index) return full
+        return `${prefix}[${checkbox.checked ? 'x' : ' '}]`
+      })
+      if (next !== latestContentRef.current) {
+        latestContentRef.current = next
+        setContent(next)
+        markNoteDirty(currentNote.id)
       }
     }
 
@@ -690,12 +771,14 @@ export const NoteView: React.FC = () => {
     }
 
     preview.addEventListener('click', handleClick)
+    preview.addEventListener('change', handleChange)
     preview.addEventListener('contextmenu', handleContextMenu)
     return () => {
       preview.removeEventListener('click', handleClick)
+      preview.removeEventListener('change', handleChange)
       preview.removeEventListener('contextmenu', handleContextMenu)
     }
-  }, [openNote, showPreview, t])
+  }, [openNote, showPreview, t, isTrashNote, currentNote, markNoteDirty])
 
   const flushCurrentNote = useCallback(async () => {
     if (!currentNote || isTrashNote) return
@@ -920,6 +1003,42 @@ export const NoteView: React.FC = () => {
           <Save size={18} strokeWidth={1.5} />
         </button>
       )}
+      {!isTrashNote && (
+        <button
+          className="icon-btn"
+          data-tooltip={pinned ? t('取消置顶') : t('置顶')}
+          onClick={() => {
+            void (async () => {
+              const ids = await window.electronAPI.notesExtras.getPinned()
+              const next = pinned ? ids.filter(id => id !== currentNote.id) : [currentNote.id, ...ids]
+              await window.electronAPI.notesExtras.setPinned(next)
+              setPinned(!pinned)
+            })()
+          }}
+        >
+          <Pin size={18} strokeWidth={1.5} style={{ color: pinned ? 'var(--accent)' : undefined }} />
+        </button>
+      )}
+      {!isTrashNote && (
+        <button
+          className="icon-btn"
+          data-tooltip={t('添加附件')}
+          onClick={() => {
+            void window.electronAPI.notesExtras.addAttachment(currentNote.id).then(async (att) => {
+              if (!att) return
+              await loadData()
+              await openNote(currentNote.id)
+            })
+          }}
+        >
+          <Paperclip size={18} strokeWidth={1.5} />
+        </button>
+      )}
+      {showPreview && (
+        <button className="icon-btn" data-tooltip={t('大纲')} onClick={() => setShowOutline(v => !v)}>
+          <ListTree size={18} strokeWidth={1.5} />
+        </button>
+      )}
 
       {!isTrashNote && saveState.noteId === currentNote.id && saveState.phase !== 'idle' && (
         <span className={`note-save-status ${saveState.phase === 'error' ? 'error' : ''}`}>
@@ -1045,7 +1164,7 @@ export const NoteView: React.FC = () => {
       {/* Note body */}
       <div className={`note-body ${!showEditor ? 'preview-note-body' : ''} ${isSplitView ? 'split-note-body' : ''}`}>
         {showEditor && (
-          <div className="note-editor-pane">
+          <div className="note-editor-pane" style={{ ['--editor-font-size' as string]: `${editorFontSize}px`, position: 'relative' }}>
             <NoteEditor
               content={content}
               onChange={handleContentChange}
@@ -1055,12 +1174,55 @@ export const NoteView: React.FC = () => {
           </div>
         )}
         {showPreview && (
-          <div ref={previewPaneRef} className="note-preview-pane">
-            <div
-              ref={previewRef}
-              className="markdown-preview"
-              dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
-            />
+          <div ref={previewPaneRef} className="note-preview-pane" style={{ display: 'flex', gap: 0 }}>
+            <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+              <div
+                ref={previewRef}
+                className="markdown-preview"
+                dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
+                style={{ fontSize: `${editorFontSize}px` }}
+              />
+              {backlinks.length > 0 && (
+                <div style={{ padding: '16px 24px 28px', borderTop: '0.5px solid var(--border)' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>{t('反向链接')}</div>
+                  {backlinks.map(link => (
+                    <button
+                      key={link.id}
+                      className="btn"
+                      style={{ display: 'block', marginBottom: 4, fontSize: 13 }}
+                      onClick={() => void openNote(link.id)}
+                    >
+                      {link.title || t('未命名笔记')}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            {showOutline && outline.length > 0 && (
+              <aside style={{
+                width: 180, flexShrink: 0, borderLeft: '0.5px solid var(--border)',
+                padding: '12px 10px', overflow: 'auto', fontSize: 12,
+              }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: 8 }}>{t('大纲')}</div>
+                {outline.map((item, idx) => (
+                  <button
+                    key={`${item.line}-${idx}`}
+                    className="btn"
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left', marginBottom: 2,
+                      paddingLeft: 4 + (item.level - 1) * 10, fontSize: 12,
+                    }}
+                    onClick={() => {
+                      const headings = previewRef.current?.querySelectorAll('h1, h2, h3')
+                      const el = headings?.[idx] as HTMLElement | undefined
+                      el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }}
+                  >
+                    {item.text}
+                  </button>
+                ))}
+              </aside>
+            )}
           </div>
         )}
         <BackToTopButton

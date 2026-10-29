@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react'
-import { EditorState } from '@codemirror/state'
+import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -382,11 +382,42 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
               }
             }
           }
+          if (update.docChanged || update.selectionSet) {
+            wikiScanRef.current?.(update.view)
+          }
         }),
+        Prec.highest(keymap.of([
+          {
+            key: 'ArrowDown',
+            run: () => wikiKeyRef.current?.('down') ?? false,
+          },
+          {
+            key: 'ArrowUp',
+            run: () => wikiKeyRef.current?.('up') ?? false,
+          },
+          {
+            key: 'Enter',
+            run: () => wikiKeyRef.current?.('enter') ?? false,
+          },
+          {
+            key: 'Escape',
+            run: () => wikiKeyRef.current?.('esc') ?? false,
+          },
+        ])),
         EditorView.domEventHandlers({
           paste: (event, view) => handlePasteRef.current(event, view),
           copy: (event, view) => handleCopyOrCut(event, view, false),
           cut: (event, view) => handleCopyOrCut(event, view, true),
+          compositionstart: () => {
+            wikiComposingRef.current = true
+            return false
+          },
+          compositionend: () => {
+            wikiComposingRef.current = false
+            const view = viewRef.current
+            if (view) wikiScanRef.current?.(view)
+            return false
+          },
           contextmenu: (event, view) => {
             const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
             if (pos == null) return false
@@ -411,7 +442,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
           },
           '.cm-scroller': {
             fontFamily: 'var(--font-mono)',
-            fontSize: '16px',
+            fontSize: 'var(--editor-font-size, 16px)',
             lineHeight: '1.75',
           },
           '.cm-content': {
@@ -457,9 +488,147 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
     }
   }, [content])
 
+  const [wikiQuery, setWikiQuery] = useState<string | null>(null)
+  const [wikiHits, setWikiHits] = useState<Array<{ id: string; title: string }>>([])
+  const [wikiIndex, setWikiIndex] = useState(0)
+  const [wikiAnchor, setWikiAnchor] = useState<{ left: number; top: number } | null>(null)
+  const wikiQueryRef = useRef<string | null>(null)
+  const wikiHitsRef = useRef<Array<{ id: string; title: string }>>([])
+  const wikiIndexRef = useRef(0)
+  const wikiComposingRef = useRef(false)
+  const wikiDebounceRef = useRef<number | null>(null)
+  const wikiScanRef = useRef<((view: EditorView) => void) | null>(null)
+  const wikiKeyRef = useRef<((action: 'up' | 'down' | 'enter' | 'esc') => boolean) | null>(null)
+  const wikiInsertRef = useRef<((note: { id: string; title: string }) => void) | null>(null)
+
+  wikiQueryRef.current = wikiQuery
+  wikiHitsRef.current = wikiHits
+  wikiIndexRef.current = wikiIndex
+
+  const clearWiki = useCallback(() => {
+    if (wikiDebounceRef.current != null) {
+      window.clearTimeout(wikiDebounceRef.current)
+      wikiDebounceRef.current = null
+    }
+    setWikiQuery(null)
+    setWikiHits([])
+    setWikiIndex(0)
+    setWikiAnchor(null)
+  }, [])
+
+  const insertWikiLink = useCallback((note: { id: string; title: string }) => {
+    const view = viewRef.current
+    if (!view || wikiQueryRef.current === null) return
+    const head = view.state.selection.main.head
+    const line = view.state.doc.lineAt(head)
+    const before = line.text.slice(0, head - line.from)
+    const match = before.match(/\[\[([^\]]*)$/)
+    if (!match) return
+    const from = line.from + (match.index ?? 0)
+    const insert = `[${note.title}](arknote-link://${note.id})`
+    view.dispatch({
+      changes: { from, to: head, insert },
+      selection: { anchor: from + insert.length },
+    })
+    clearWiki()
+  }, [clearWiki])
+
+  wikiInsertRef.current = insertWikiLink
+
+  wikiScanRef.current = (view: EditorView) => {
+    if (wikiComposingRef.current) return
+    const head = view.state.selection.main.head
+    const line = view.state.doc.lineAt(head)
+    const before = line.text.slice(0, head - line.from)
+    const match = before.match(/\[\[([^\]]*)$/)
+    if (!match) {
+      clearWiki()
+      return
+    }
+    const q = match[1]
+    setWikiQuery(q)
+
+    const coords = view.coordsAtPos(head)
+    const parent = containerRef.current?.parentElement?.getBoundingClientRect()
+    if (coords && parent) {
+      const left = Math.min(Math.max(8, coords.left - parent.left), Math.max(8, parent.width - 260))
+      const top = Math.min(Math.max(8, coords.bottom - parent.top + 6), Math.max(8, parent.height - 80))
+      setWikiAnchor({ left, top })
+    } else {
+      setWikiAnchor({ left: 48, top: 48 })
+    }
+
+    if (wikiDebounceRef.current != null) window.clearTimeout(wikiDebounceRef.current)
+    wikiDebounceRef.current = window.setTimeout(() => {
+      void window.electronAPI.search.byTitle(q, 8).then((notes) => {
+        if (wikiQueryRef.current !== q) return
+        setWikiHits(notes.map(n => ({ id: n.id, title: n.title })))
+        setWikiIndex(0)
+      })
+    }, 120)
+  }
+
+  wikiKeyRef.current = (action) => {
+    if (wikiQueryRef.current === null) return false
+    const hits = wikiHitsRef.current
+    if (action === 'esc') {
+      clearWiki()
+      return true
+    }
+    if (action === 'down') {
+      if (hits.length === 0) return true
+      setWikiIndex((i) => (i + 1) % hits.length)
+      return true
+    }
+    if (action === 'up') {
+      if (hits.length === 0) return true
+      setWikiIndex((i) => (i - 1 + hits.length) % hits.length)
+      return true
+    }
+    if (action === 'enter') {
+      const note = hits[wikiIndexRef.current]
+      if (note) wikiInsertRef.current?.(note)
+      return true
+    }
+    return false
+  }
+
+  useEffect(() => () => {
+    if (wikiDebounceRef.current != null) window.clearTimeout(wikiDebounceRef.current)
+  }, [])
+
   return (
-    <>
+    <div style={{ position: 'relative', height: '100%', flex: 1, minHeight: 0 }}>
       <div ref={containerRef} className="editor-container" />
+      {wikiQuery !== null && wikiAnchor && (
+        <div className="wiki-link-popup" style={{
+          position: 'absolute', left: wikiAnchor.left, top: wikiAnchor.top, zIndex: 20,
+          background: 'var(--bg-surface)', border: '0.5px solid var(--border)',
+          borderRadius: 8, padding: 6, minWidth: 240, maxWidth: 360,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.18)',
+        }}>
+          {wikiHits.length === 0 ? (
+            <div style={{ padding: '8px 10px', fontSize: 13, color: 'var(--text-muted)' }}>
+              {t('没有匹配的笔记')}
+            </div>
+          ) : wikiHits.map((note, i) => (
+            <button
+              key={note.id}
+              className="btn"
+              style={{
+                width: '100%', justifyContent: 'flex-start', marginBottom: 2,
+                background: i === wikiIndex ? 'var(--bg-hover)' : 'transparent',
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                insertWikiLink(note)
+              }}
+            >
+              {note.title || t('未命名笔记')}
+            </button>
+          ))}
+        </div>
+      )}
       {pasteConvertOffer && (
         <PasteConvertNotice
           onConvert={handleConvertPaste}
@@ -474,6 +643,6 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
           onClose={() => setImageContextMenu(null)}
         />
       )}
-    </>
+    </div>
   )
 }

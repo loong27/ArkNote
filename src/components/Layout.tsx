@@ -9,6 +9,9 @@ import { MoveDialog } from './Dialogs/MoveDialog'
 import { TagDialog } from './Dialogs/TagDialog'
 import { VersionDialog } from './Dialogs/VersionDialog'
 import { SettingsDialog } from './Dialogs/SettingsDialog'
+import { QuickOpenDialog } from './Dialogs/QuickOpenDialog'
+import { RecoveryTipDialog } from './Dialogs/RecoveryTipDialog'
+import { TimeCapsuleDialog } from './Dialogs/TimeCapsuleDialog'
 import type { SecurityConfig } from '../types'
 import { DefaultAvatar } from './common/DefaultAvatar'
 import { useI18n } from '../i18n/I18nProvider'
@@ -21,8 +24,13 @@ export const Layout: React.FC = () => {
     setSidebarWidth,
     settingsDialogOpen,
     closeSettingsDialog,
+    setSidebarTab,
+    openSettingsDialog,
   } = useStore()
   const [isResizing, setIsResizing] = useState(false)
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [recoveryTip, setRecoveryTip] = useState(false)
+  const [timeCapsule, setTimeCapsule] = useState(false)
   const layoutRef = useRef<HTMLDivElement>(null)
   const sidebarWidthRef = useRef(sidebarWidth)
   const idleTimerRef = useRef<number | null>(null)
@@ -199,6 +207,12 @@ export const Layout: React.FC = () => {
     }
   }, [isResizing, handleMouseMove, handleMouseUp])
 
+  useEffect(() => {
+    void window.electronAPI.vault.getRecoveryTipPending?.().then((pending) => {
+      if (pending) setRecoveryTip(true)
+    }).catch(() => undefined)
+  }, [])
+
   // Global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -210,18 +224,39 @@ export const Layout: React.FC = () => {
           void saveManualVersion()
         }
       }
+      // Ctrl+P: quick open by title
+      if (e.ctrlKey && !e.shiftKey && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault()
+        setQuickOpen(true)
+      }
+      // Ctrl+Shift+F: focus global search
+      if (e.ctrlKey && e.shiftKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault()
+        setSidebarTab('search')
+        window.setTimeout(() => {
+          const input = document.querySelector<HTMLInputElement>('.global-search-input, .sidebar-panel input[type="search"], .sidebar-panel input')
+          input?.focus()
+        }, 50)
+      }
     }
 
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  }, [setSidebarTab])
 
   return (
     <>
       <div className="app-layout" ref={layoutRef}>
         {/* Sidebar */}
         <div style={{ flex: `0 0 ${sidebarWidth}%`, minWidth: 0, position: 'relative' }}>
-          <Sidebar />
+          <Sidebar
+            onOpenTimeCapsule={() => setTimeCapsule(true)}
+            onOpenDailyNote={async () => {
+              const note = await window.electronAPI.notesExtras.getDailyNote()
+              await useStore.getState().loadData()
+              await useStore.getState().openNote(note.id)
+            }}
+          />
         </div>
 
         {/* Resize handle */}
@@ -241,17 +276,25 @@ export const Layout: React.FC = () => {
               <p>{t('安全、加密的跨平台笔记应用')}</p>
               <div className="shortcuts">
                 <div className="shortcut">
+                  <kbd>Ctrl + P</kbd>
+                  <span>{t('快速打开')}</span>
+                </div>
+                <div className="shortcut">
                   <kbd>Ctrl + S</kbd>
                   <span>{t('保存版本')}</span>
+                </div>
+                <div className="shortcut">
+                  <kbd>Ctrl + Shift + F</kbd>
+                  <span>{t('全文搜索')}</span>
                 </div>
                 <div className="shortcut">
                   <kbd>Ctrl + F</kbd>
                   <span>{t('笔记内搜索')}</span>
                 </div>
-                <div className="shortcut">
-                  <kbd>Ctrl + V</kbd>
-                  <span>{t('粘贴图片')}</span>
-                </div>
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+                <button className="btn" onClick={() => setQuickOpen(true)}>{t('快速打开')}</button>
+                <button className="btn" onClick={openSettingsDialog}>{t('设置')}</button>
               </div>
             </div>
           )}
@@ -269,6 +312,9 @@ export const Layout: React.FC = () => {
       <TagDialog />
       <VersionDialog />
       <SettingsDialog open={settingsDialogOpen} onClose={closeSettingsDialog} />
+      <QuickOpenDialog open={quickOpen} onClose={() => setQuickOpen(false)} />
+      <RecoveryTipDialog open={recoveryTip} onClose={() => setRecoveryTip(false)} />
+      <TimeCapsuleDialog open={timeCapsule} onClose={() => setTimeCapsule(false)} />
     </>
   )
 }

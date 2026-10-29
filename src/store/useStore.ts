@@ -313,11 +313,7 @@ export const useStore = create<AppState>((set, get) => {
     provider: 'git',
     repoUrl: '',
     branch: 'main',
-    ossEndpoint: '',
-    ossBucket: '',
-    ossAccessKey: '',
-    ossSecretKey: '',
-    ossRegion: '',
+    httpsToken: '',
     autoSync: false,
     syncInterval: 30,
   },
@@ -375,11 +371,7 @@ export const useStore = create<AppState>((set, get) => {
           provider: 'git',
           repoUrl: '',
           branch: 'main',
-          ossEndpoint: '',
-          ossBucket: '',
-          ossAccessKey: '',
-          ossSecretKey: '',
-          ossRegion: '',
+          httpsToken: '',
           autoSync: false,
           syncInterval: 30,
         },
@@ -729,6 +721,7 @@ export const useStore = create<AppState>((set, get) => {
   openNoteWithoutFlush: async (noteId: string, preserveHistory = false) => {
     try {
       const noteContent = await window.electronAPI.notes.get(noteId)
+      void window.electronAPI.notesExtras.touchRecent(noteId).catch(() => undefined)
       const { noteHistory, noteHistoryIndex, noteTabs } = get()
       const nextTabs = noteTabs.some(tab => tab.noteId === noteId) ? noteTabs : [...noteTabs, { noteId }]
 

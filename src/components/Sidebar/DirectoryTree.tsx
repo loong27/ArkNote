@@ -21,7 +21,7 @@ import { useI18n } from '../../i18n/I18nProvider'
 
 const leadingTitleRegex = /^(\s*)#\s+[^\n#].*?(?:\s+#*)?\s*(\r?\n|$)/
 const DIR_MENU_WIDTH = 180
-const DIR_MENU_HEIGHT = 136
+const DIR_MENU_HEIGHT = 220
 const DIR_MENU_PADDING = 8
 
 type DropPosition = 'before' | 'after' | 'inside' | 'root'
@@ -529,6 +529,23 @@ export const DirectoryTree: React.FC = () => {
     }
   }
 
+  const handleImportFolder = async (directoryId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    try {
+      const result = await window.electronAPI.import.importFolder(directoryId)
+      if (result.success) {
+        await loadData()
+        if (result.imported > 0) {
+          alert(t(result.message))
+        }
+      } else if (!result.message.includes('取消')) {
+        alert(t(result.message))
+      }
+    } catch (error) {
+      console.error('Import folder failed:', error)
+    }
+  }
+
   const renderDir = (dir: Directory, level: number) => {
     const isExpanded = expandedDirs.has(dir.id)
     const isActive = selectedDirectoryId === dir.id
@@ -687,6 +704,33 @@ export const DirectoryTree: React.FC = () => {
                   >
                     <FileUp size={14} strokeWidth={1.5} />
                     {t('导入 PDF')}
+                  </button>
+                  <button
+                    className="note-menu-item"
+                    onClick={(e) => {
+                      setOpenDirMenuId(null)
+                      setDirMenuPosition(null)
+                      void handleImportFolder(dir.id, e)
+                    }}
+                  >
+                    <FolderPlus size={14} strokeWidth={1.5} />
+                    {t('导入文件夹')}
+                  </button>
+                  <button
+                    className="note-menu-item"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setOpenDirMenuId(null)
+                      setDirMenuPosition(null)
+                      void (async () => {
+                        const note = await window.electronAPI.notesExtras.createFromTemplate(dir.id, 'meeting')
+                        await loadData()
+                        await openNote(note.id)
+                      })()
+                    }}
+                  >
+                    <FileText size={14} strokeWidth={1.5} />
+                    {t('会议记录')}
                   </button>
                   <div className="note-menu-separator" />
                   <button

@@ -23,6 +23,7 @@ export const PasswordDialog: React.FC = () => {
   const [now, setNow] = useState(Date.now())
   const [restoreRepoUrl, setRestoreRepoUrl] = useState('')
   const [restoreBranch, setRestoreBranch] = useState('main')
+  const [restoreHttpsToken, setRestoreHttpsToken] = useState('')
   const [restoreError, setRestoreError] = useState('')
   const [restoring, setRestoring] = useState(false)
   const [restored, setRestored] = useState(false)
@@ -143,7 +144,7 @@ export const PasswordDialog: React.FC = () => {
   const handleRestore = useCallback(async () => {
     if (restoring) return
     if (!restoreRepoUrl.trim()) {
-      setRestoreError(t('请输入 GitHub 仓库地址'))
+      setRestoreError(t('请输入 Git 仓库地址'))
       return
     }
 
@@ -153,6 +154,7 @@ export const PasswordDialog: React.FC = () => {
       const result = await window.electronAPI.auth.restoreFromGit({
         repoUrl: restoreRepoUrl.trim(),
         branch: restoreBranch.trim() || 'main',
+        httpsToken: restoreHttpsToken.trim() || undefined,
       })
       if (!result.success) {
         setRestoreError(t(result.message))
@@ -167,7 +169,7 @@ export const PasswordDialog: React.FC = () => {
     } finally {
       setRestoring(false)
     }
-  }, [restoreBranch, restoreRepoUrl, restoring])
+  }, [restoreBranch, restoreHttpsToken, restoreRepoUrl, restoring, t])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -198,7 +200,7 @@ export const PasswordDialog: React.FC = () => {
             <DefaultAvatar alt="arkNote" size={72} />
           </div>
           <h1>{t('欢迎使用 arkNote')}</h1>
-          <p>{t('选择新建加密仓库，或恢复已有的 GitHub 数据。')}</p>
+          <p>{t('选择新建加密仓库，或从任意 Git 远端恢复已有数据。')}</p>
 
           <div className="setup-choice-list">
             <button className="setup-choice-button" type="button" onClick={() => setMode('setup')}>
@@ -212,7 +214,7 @@ export const PasswordDialog: React.FC = () => {
             <button className="setup-choice-button" type="button" onClick={() => setMode('restore')}>
               <span className="setup-choice-icon"><CloudDownload size={20} strokeWidth={1.7} /></span>
               <span className="setup-choice-copy">
-                <strong>{t('从 GitHub 恢复')}</strong>
+                <strong>{t('从 Git 恢复')}</strong>
                 <small>{t('拉取已有加密仓库并使用原密码解锁')}</small>
               </span>
               <ChevronRight size={18} strokeWidth={1.7} />
@@ -245,14 +247,14 @@ export const PasswordDialog: React.FC = () => {
 
           <div className="input-group restore-inputs">
             <div>
-              <label>{t('GitHub 仓库地址')}</label>
+              <label>{t('Git 仓库地址（HTTPS 或 SSH）')}</label>
               <input
                 type="text"
                 value={restoreRepoUrl}
                 maxLength={512}
                 onChange={(event) => { setRestoreRepoUrl(event.target.value); setRestoreError('') }}
                 onKeyDown={handleKeyDown}
-                placeholder="git@github.com:user/notes.git"
+                placeholder="https://github.com/user/notes.git"
                 autoFocus
               />
             </div>
@@ -267,11 +269,22 @@ export const PasswordDialog: React.FC = () => {
                 placeholder="main"
               />
             </div>
+            <div>
+              <label>{t('HTTPS 访问令牌（可选，仅存本机）')}</label>
+              <input
+                type="password"
+                value={restoreHttpsToken}
+                maxLength={512}
+                onChange={(event) => { setRestoreHttpsToken(event.target.value); setRestoreError('') }}
+                onKeyDown={handleKeyDown}
+                placeholder={t('GitHub PAT / GitLab Token')}
+              />
+            </div>
             {restoreError && <div className="error-msg">{restoreError}</div>}
           </div>
 
           <button onClick={handleRestore} disabled={restoring}>
-            {restoring ? t('正在从 GitHub 恢复...') : t('恢复加密数据')}
+            {restoring ? t('正在从 Git 恢复...') : t('恢复加密数据')}
           </button>
         </div>
       </div>

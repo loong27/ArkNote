@@ -62,7 +62,8 @@ export interface SearchMatch {
 
 // ========== Sync Types ==========
 
-export type SyncProvider = 'git' | 'oss'
+/** Git is the only live sync provider. OSS is reserved for future cold backup. */
+export type SyncProvider = 'git'
 
 export interface SyncConfig {
   enabled: boolean
@@ -70,12 +71,11 @@ export interface SyncConfig {
   // Git settings
   repoUrl: string
   branch: string
-  // OSS settings
-  ossEndpoint: string
-  ossBucket: string
-  ossAccessKey: string
-  ossSecretKey: string
-  ossRegion: string
+  /**
+   * HTTPS personal access token / password.
+   * Stored only in local app config (~/.ark-note-config.json), never in the vault Git tree.
+   */
+  httpsToken?: string
   // Common
   autoSync: boolean
   syncInterval: number // minutes
@@ -83,6 +83,8 @@ export interface SyncConfig {
 
 export interface SyncConflict {
   file: string
+  /** Human-readable label (note title / path) for UI */
+  displayName?: string
   localContent: string
   remoteContent: string
   resolved: boolean
@@ -94,6 +96,67 @@ export interface SyncStatus {
   status: 'idle' | 'syncing' | 'error' | 'success' | 'conflict'
   message: string
   conflicts?: SyncConflict[]
+  /** Categorized failure for UI: auth | conflict | network | other */
+  errorKind?: 'auth' | 'conflict' | 'network' | 'other'
+}
+
+export interface VaultIntegrityIssue {
+  path: string
+  severity: 'error' | 'warning'
+  message: string
+}
+
+export interface VaultIntegrityReport {
+  ok: boolean
+  checkedAt: string
+  saltOk: boolean
+  verifyOk: boolean
+  metadataOk: boolean
+  notesChecked: number
+  notesOk: number
+  imagesChecked: number
+  imagesOk: number
+  versionsChecked: number
+  versionsOk: number
+  issues: VaultIntegrityIssue[]
+}
+
+export interface ColdBackupConfig {
+  enabled: boolean
+  endpoint: string
+  bucket: string
+  region: string
+  accessKeyId: string
+  secretAccessKey: string
+  prefix: string
+  intervalHours: number
+  lastBackupAt: string | null
+  lastError: string | null
+}
+
+export interface TimeCapsuleNote {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ColdBackupActionResult {
+  success: boolean
+  message: string
+  detail?: string
+}
+
+export interface EditorPrefs {
+  fontSize: number
+  defaultView: 'edit' | 'preview' | 'split'
+}
+
+export interface SearchOptions {
+  directoryIds?: string[]
+  tagIds?: string[]
+  totalLimit?: number
+  offset?: number
 }
 
 export type AuthErrorCode =
@@ -120,6 +183,7 @@ export interface AuthThrottleStatus {
 export interface VaultRestoreRequest {
   repoUrl: string
   branch: string
+  httpsToken?: string
 }
 
 export interface VaultRestoreResult {
@@ -245,7 +309,8 @@ export interface ElectronAPI {
   tags: {
     list: () => Promise<Tag[]>
     create: (name: string, color: string) => Promise<Tag>
-    delete: (id: string) => Promise<{ success: boolean; message: string }>
+    rename: (id: string, name: string) => Promise<Tag>
+    delete: (id: string, removeFromNotes?: boolean) => Promise<{ success: boolean; message: string }>
     assign: (noteId: string, tagIds: string[]) => Promise<void>
     getNotesForTag: (tagId: string) => Promise<NoteMetadata[]>
   }
@@ -254,11 +319,15 @@ export interface ElectronAPI {
     list: (noteId: string) => Promise<Version[]>
     get: (noteId: string, timestamp: string) => Promise<string>
     save: (noteId: string) => Promise<void>
+    diff: (noteId: string, timestamp: string) => Promise<{ current: string; version: string; unified: string }>
+    prune: (noteId?: string) => Promise<{ removed: number }>
   }
   // Search
   search: {
-    global: (query: string, directoryIds?: string[], totalLimit?: number) => Promise<SearchResult[]>
+    global: (query: string, directoryIds?: string[], totalLimit?: number, tagIds?: string[], offset?: number) => Promise<SearchResult[]>
+    byTitle: (query: string, limit?: number) => Promise<NoteMetadata[]>
     inNote: (noteId: string, query: string) => Promise<SearchMatch[]>
+    backlinks: (noteId: string) => Promise<NoteMetadata[]>
   }
   // Images
   images: {
@@ -298,6 +367,43 @@ export interface ElectronAPI {
   import: {
     importMd: (directoryId: string) => Promise<{ success: boolean; noteId?: string; message: string }>
     importPdf: (directoryId: string) => Promise<{ success: boolean; noteId?: string; message: string }>
+    importFolder: (directoryId: string | null) => Promise<{ success: boolean; imported: number; message: string }>
+  }
+  // Vault backup / integrity
+  vault: {
+    exportBackup: () => Promise<{ success: boolean; canceled?: boolean; filePath?: string; message: string }>
+    verifyIntegrity: () => Promise<VaultIntegrityReport>
+    getRecoveryTipPending?: () => Promise<boolean>
+    dismissRecoveryTip?: () => Promise<void>
+  }
+  // Notes extras
+  notesExtras: {
+    getPinned: () => Promise<string[]>
+    setPinned: (noteIds: string[]) => Promise<string[]>
+    getRecent: () => Promise<string[]>
+    touchRecent: (noteId: string) => Promise<string[]>
+    getEditorPrefs: () => Promise<EditorPrefs>
+    setEditorPrefs: (prefs: Partial<EditorPrefs>) => Promise<EditorPrefs>
+    createFromTemplate: (directoryId: string, template: 'blank' | 'daily' | 'meeting') => Promise<NoteMetadata>
+    getDailyNote: () => Promise<NoteMetadata>
+    getOutline: (noteId: string) => Promise<Array<{ level: number; text: string; line: number }>>
+    listAttachments: (noteId: string) => Promise<Array<{ id: string; name: string; mime: string }>>
+    addAttachment: (noteId: string) => Promise<{ id: string; name: string; mime: string } | null>
+    openAttachment: (attachmentId: string) => Promise<{ success: boolean; message?: string }>
+    getTimeCapsule: () => Promise<Array<{ year: number; month: number; created: number; updated: number }>>
+    listByMonth: (request: {
+      year: number
+      month: number
+      mode?: 'created' | 'updated'
+    }) => Promise<TimeCapsuleNote[]>
+  }
+  // Cold backup (S3-compatible encrypted snapshot channel)
+  coldBackup: {
+    getConfig: () => Promise<ColdBackupConfig>
+    setConfig: (config: ColdBackupConfig) => Promise<ColdBackupConfig>
+    runNow: () => Promise<ColdBackupActionResult>
+    testConnection: () => Promise<ColdBackupActionResult>
+    restoreFromFile: () => Promise<ColdBackupActionResult>
   }
   // App Config
   config: {
@@ -314,6 +420,10 @@ export interface ElectronAPI {
       sidebarWidth: number
       autoLockMinutes: number
       lockOnMinimize: boolean
+      editorFontSize: number
+      editorDefaultView: 'edit' | 'preview' | 'split'
+      pinnedNoteIds: string[]
+      recentNoteIds: string[]
     }>
     restartApp: () => Promise<void>
     getTheme: () => Promise<'dark' | 'light'>

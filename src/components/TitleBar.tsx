@@ -20,10 +20,30 @@ export const TitleBar: React.FC = () => {
   const [locking, setLocking] = useState(false)
   const isLocked = useStore((state) => state.isLocked)
   const setLocked = useStore((state) => state.setLocked)
+  const syncStatus = useStore((state) => state.syncStatus)
   const setSyncStatus = useStore((state) => state.setSyncStatus)
   const flushPendingSaves = useStore((state) => state.flushPendingSaves)
   const loadData = useStore((state) => state.loadData)
   const refreshCurrentNote = useStore((state) => state.refreshCurrentNote)
+
+  useEffect(() => {
+    if (isLocked) return
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const status = await window.electronAPI.sync.getStatus()
+        if (!cancelled) setSyncStatus(status)
+      } catch {
+        // ignore
+      }
+    }
+    void poll()
+    const timer = window.setInterval(() => void poll(), 15000)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [isLocked, setSyncStatus])
 
   // Listen for maximize/unmaximize events from main process
   useEffect(() => {
@@ -134,11 +154,45 @@ export const TitleBar: React.FC = () => {
         <div className="title-bar-controls">
           {!isLocked && (
             <>
+              <span
+                className="title-bar-sync-status"
+                title={[
+                  syncStatus.message || t('就绪'),
+                  syncStatus.lastSync
+                    ? t('上次同步: {date}', { date: new Date(syncStatus.lastSync).toLocaleString() })
+                    : '',
+                  syncStatus.errorKind ? `errorKind=${syncStatus.errorKind}` : '',
+                ].filter(Boolean).join('\n')}
+                style={{
+                  fontSize: 11,
+                  maxWidth: 160,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  color: syncStatus.status === 'error' || syncStatus.status === 'conflict'
+                    ? 'var(--warning)'
+                    : syncStatus.status === 'success'
+                      ? 'var(--success)'
+                      : 'var(--text-muted)',
+                  marginRight: 4,
+                  pointerEvents: 'auto',
+                }}
+              >
+                {syncing || syncStatus.status === 'syncing'
+                  ? t('同步中...')
+                  : syncStatus.status === 'conflict'
+                    ? t('有冲突')
+                    : syncStatus.status === 'error'
+                      ? (syncStatus.errorKind === 'auth' ? t('认证失败') : syncStatus.errorKind === 'network' ? t('网络错误') : t('同步失败'))
+                      : syncStatus.lastSync
+                        ? t('已同步')
+                        : t('未同步')}
+              </span>
               <button
                 className="title-bar-btn"
                 onClick={handleSync}
                 disabled={syncing || locking}
-                title={syncing ? t('同步中...') : t('立即同步')}
+                title={syncing ? t('同步中...') : (syncStatus.message || t('立即同步'))}
               >
                 <RefreshCw size={13} strokeWidth={1.5} className={syncing ? 'spin' : ''} />
               </button>

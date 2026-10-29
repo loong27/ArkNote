@@ -27,6 +27,19 @@ export interface StoredAuthThrottle {
   lastFailureAt: number
 }
 
+export interface ColdBackupConfigData {
+  enabled: boolean
+  endpoint: string
+  bucket: string
+  region: string
+  accessKeyId: string
+  secretAccessKey: string
+  prefix: string
+  intervalHours: number
+  lastBackupAt: string | null
+  lastError: string | null
+}
+
 export interface AppConfigData {
   /** Path to the encrypted data vault directory */
   dataDir: string
@@ -46,6 +59,16 @@ export interface AppConfigData {
   lockOnMinimize: boolean
   /** Per-vault password retry state. This is deterrence, not offline-attack protection. */
   authThrottle: Record<string, StoredAuthThrottle>
+  /** HTTPS Git token — local only, never written into the vault Git tree */
+  gitHttpsToken: string
+  editorFontSize: number
+  editorDefaultView: 'edit' | 'preview' | 'split'
+  pinnedNoteIds: string[]
+  recentNoteIds: string[]
+  /** S3-compatible encrypted cold backup credentials (local only) */
+  coldBackup: ColdBackupConfigData
+  /** Show one-time recovery tip after first vault creation */
+  recoveryTipPending: boolean
 }
 
 const CONFIG_PATH = path.join(os.homedir(), '.ark-note-config.json')
@@ -95,6 +118,13 @@ export class AppConfig {
           autoLockMinutes: this.clampAutoLockMinutes(parsed.autoLockMinutes),
           lockOnMinimize: parsed.lockOnMinimize !== false,
           authThrottle: this.sanitizeAuthThrottle(parsed.authThrottle),
+          gitHttpsToken: typeof parsed.gitHttpsToken === 'string' ? parsed.gitHttpsToken : '',
+          editorFontSize: this.clampFontSize(parsed.editorFontSize),
+          editorDefaultView: this.sanitizeEditorView(parsed.editorDefaultView),
+          pinnedNoteIds: this.sanitizeIdList(parsed.pinnedNoteIds),
+          recentNoteIds: this.sanitizeIdList(parsed.recentNoteIds),
+          coldBackup: this.sanitizeColdBackup(parsed.coldBackup),
+          recoveryTipPending: Boolean(parsed.recoveryTipPending),
         }
       }
     } catch (error) {
@@ -110,6 +140,58 @@ export class AppConfig {
       autoLockMinutes: 15,
       lockOnMinimize: true,
       authThrottle: {},
+      gitHttpsToken: '',
+      editorFontSize: 16,
+      editorDefaultView: 'split',
+      pinnedNoteIds: [],
+      recentNoteIds: [],
+      coldBackup: this.sanitizeColdBackup(undefined),
+      recoveryTipPending: false,
+    }
+  }
+
+  private clampFontSize(size: unknown): number {
+    if (typeof size !== 'number' || !Number.isFinite(size)) return 16
+    return Math.min(28, Math.max(12, Math.round(size)))
+  }
+
+  private sanitizeEditorView(value: unknown): 'edit' | 'preview' | 'split' {
+    return value === 'edit' || value === 'preview' || value === 'split' ? value : 'split'
+  }
+
+  private sanitizeIdList(value: unknown): string[] {
+    if (!Array.isArray(value)) return []
+    return value.filter((id): id is string => typeof id === 'string' && id.length > 0).slice(0, 100)
+  }
+
+  private sanitizeColdBackup(value: unknown): ColdBackupConfigData {
+    const defaults: ColdBackupConfigData = {
+      enabled: false,
+      endpoint: '',
+      bucket: '',
+      region: '',
+      accessKeyId: '',
+      secretAccessKey: '',
+      prefix: 'arknote-cold',
+      intervalHours: 24,
+      lastBackupAt: null,
+      lastError: null,
+    }
+    if (!value || typeof value !== 'object') return defaults
+    const v = value as Partial<ColdBackupConfigData>
+    return {
+      enabled: Boolean(v.enabled),
+      endpoint: typeof v.endpoint === 'string' ? v.endpoint : '',
+      bucket: typeof v.bucket === 'string' ? v.bucket : '',
+      region: typeof v.region === 'string' ? v.region : '',
+      accessKeyId: typeof v.accessKeyId === 'string' ? v.accessKeyId : '',
+      secretAccessKey: typeof v.secretAccessKey === 'string' ? v.secretAccessKey : '',
+      prefix: typeof v.prefix === 'string' && v.prefix.trim() ? v.prefix.trim() : 'arknote-cold',
+      intervalHours: typeof v.intervalHours === 'number' && v.intervalHours > 0
+        ? Math.min(168, Math.max(1, Math.round(v.intervalHours)))
+        : 24,
+      lastBackupAt: typeof v.lastBackupAt === 'string' ? v.lastBackupAt : null,
+      lastError: typeof v.lastError === 'string' ? v.lastError : null,
     }
   }
 
@@ -264,11 +346,82 @@ export class AppConfig {
     this.save()
   }
 
+  getGitHttpsToken(): string {
+    return this.config.gitHttpsToken || ''
+  }
+
+  setGitHttpsToken(token: string): void {
+    this.config.gitHttpsToken = token
+    this.save()
+  }
+
+  getEditorPrefs(): { fontSize: number; defaultView: 'edit' | 'preview' | 'split' } {
+    return {
+      fontSize: this.config.editorFontSize,
+      defaultView: this.config.editorDefaultView,
+    }
+  }
+
+  setEditorPrefs(prefs: Partial<{ fontSize: number; defaultView: 'edit' | 'preview' | 'split' }>): {
+    fontSize: number
+    defaultView: 'edit' | 'preview' | 'split'
+  } {
+    if (prefs.fontSize !== undefined) this.config.editorFontSize = this.clampFontSize(prefs.fontSize)
+    if (prefs.defaultView !== undefined) this.config.editorDefaultView = this.sanitizeEditorView(prefs.defaultView)
+    this.save()
+    return this.getEditorPrefs()
+  }
+
+  getPinnedNoteIds(): string[] {
+    return [...this.config.pinnedNoteIds]
+  }
+
+  setPinnedNoteIds(ids: string[]): string[] {
+    this.config.pinnedNoteIds = this.sanitizeIdList(ids)
+    this.save()
+    return this.getPinnedNoteIds()
+  }
+
+  getRecentNoteIds(): string[] {
+    return [...this.config.recentNoteIds]
+  }
+
+  touchRecentNote(noteId: string): string[] {
+    const next = [noteId, ...this.config.recentNoteIds.filter(id => id !== noteId)].slice(0, 30)
+    this.config.recentNoteIds = next
+    this.save()
+    return [...next]
+  }
+
+  getColdBackupConfig(): ColdBackupConfigData {
+    return { ...this.config.coldBackup }
+  }
+
+  setColdBackupConfig(config: ColdBackupConfigData): ColdBackupConfigData {
+    this.config.coldBackup = this.sanitizeColdBackup(config)
+    this.save()
+    return this.getColdBackupConfig()
+  }
+
+  getRecoveryTipPending(): boolean {
+    return Boolean(this.config.recoveryTipPending)
+  }
+
+  setRecoveryTipPending(pending: boolean): void {
+    this.config.recoveryTipPending = pending
+    this.save()
+  }
+
   /**
    * Get the full config
    */
   getAll(): AppConfigData {
-    return { ...this.config }
+    return {
+      ...this.config,
+      pinnedNoteIds: [...this.config.pinnedNoteIds],
+      recentNoteIds: [...this.config.recentNoteIds],
+      coldBackup: { ...this.config.coldBackup },
+    }
   }
 
   /**

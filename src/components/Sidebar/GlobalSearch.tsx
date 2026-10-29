@@ -4,12 +4,13 @@ import { useStore } from '../../store/useStore'
 import type { SearchResult } from '../../types'
 import { useI18n } from '../../i18n/I18nProvider'
 
-const GLOBAL_SEARCH_TOTAL_LIMIT = 20
+const GLOBAL_SEARCH_PAGE = 50
 
 export const GlobalSearch: React.FC = () => {
   const { t } = useI18n()
   const {
     directories,
+    tags,
     globalSearchQuery,
     globalSearchResults,
     globalSearchDirIds,
@@ -21,6 +22,9 @@ export const GlobalSearch: React.FC = () => {
 
   const [showFilters, setShowFilters] = useState(false)
   const [searching, setSearching] = useState(false)
+  const [tagFilterIds, setTagFilterIds] = useState<string[]>([])
+  const [offset, setOffset] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
 
   // Debounced search
   useEffect(() => {
@@ -29,6 +33,8 @@ export const GlobalSearch: React.FC = () => {
     if (!globalSearchQuery.trim()) {
       setSearching(false)
       setGlobalSearchResults([])
+      setOffset(0)
+      setHasMore(false)
       return () => { cancelled = true }
     }
 
@@ -39,10 +45,14 @@ export const GlobalSearch: React.FC = () => {
         const results = await window.electronAPI.search.global(
           globalSearchQuery,
           globalSearchDirIds.length > 0 ? globalSearchDirIds : undefined,
-          GLOBAL_SEARCH_TOTAL_LIMIT
+          GLOBAL_SEARCH_PAGE,
+          tagFilterIds.length > 0 ? tagFilterIds : undefined,
+          0,
         )
         if (!cancelled) {
           setGlobalSearchResults(results)
+          setOffset(results.length)
+          setHasMore(results.length >= GLOBAL_SEARCH_PAGE)
         }
       } catch (error) {
         if (!cancelled) {
@@ -58,7 +68,25 @@ export const GlobalSearch: React.FC = () => {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [globalSearchQuery, globalSearchDirIds, setGlobalSearchResults])
+  }, [globalSearchQuery, globalSearchDirIds, tagFilterIds, setGlobalSearchResults])
+
+  const loadMore = async () => {
+    setSearching(true)
+    try {
+      const more = await window.electronAPI.search.global(
+        globalSearchQuery,
+        globalSearchDirIds.length > 0 ? globalSearchDirIds : undefined,
+        GLOBAL_SEARCH_PAGE,
+        tagFilterIds.length > 0 ? tagFilterIds : undefined,
+        offset,
+      )
+      setGlobalSearchResults([...globalSearchResults, ...more])
+      setOffset(offset + more.length)
+      setHasMore(more.length >= GLOBAL_SEARCH_PAGE)
+    } finally {
+      setSearching(false)
+    }
+  }
 
   const toggleDirFilter = useCallback((dirId: string) => {
     const current = [...globalSearchDirIds]
@@ -87,7 +115,8 @@ export const GlobalSearch: React.FC = () => {
         <div className="search-wrapper">
           <Search size={14} strokeWidth={1.5} className="search-icon" />
           <input
-            type="text"
+            className="global-search-input"
+            type="search"
             value={globalSearchQuery}
             onChange={(e) => setGlobalSearchQuery(e.target.value)}
             placeholder={t('在所有笔记中搜索...')}
@@ -151,6 +180,24 @@ export const GlobalSearch: React.FC = () => {
               <span>{dir.name}</span>
             </div>
           ))}
+          {tags.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>{t('按标签筛选')}</div>
+              {tags.map(tag => (
+                <div
+                  key={tag.id}
+                  className="move-tree-item"
+                  style={{ padding: '4px 8px', fontSize: 13 } as React.CSSProperties}
+                  onClick={() => {
+                    setTagFilterIds(prev => prev.includes(tag.id) ? prev.filter(id => id !== tag.id) : [...prev, tag.id])
+                  }}
+                >
+                  {tagFilterIds.includes(tag.id) ? <Check size={14} color="var(--accent)" /> : <span style={{ width: 14, height: 14, borderRadius: '50%', background: tag.color, display: 'inline-block' }} />}
+                  <span>{tag.name}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -195,6 +242,12 @@ export const GlobalSearch: React.FC = () => {
             <Search size={32} strokeWidth={1.5} />
             <p>{t('输入关键词搜索所有笔记')}</p>
           </div>
+        )}
+
+        {hasMore && (
+          <button className="btn" style={{ width: '100%', marginTop: 8 }} onClick={() => void loadMore()} disabled={searching}>
+            {t('加载更多')}
+          </button>
         )}
       </div>
     </div>

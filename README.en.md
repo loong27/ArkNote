@@ -146,6 +146,12 @@ Updates require `latest*.yml`, the installer or application image, and blockmap 
 | `npm run test:sync` | Run Git synchronization integration tests |
 | `npm run test:updater` | Validate GitHub Release updater configuration |
 | `npm run test:i18n` | Verify translation keys, interpolation, and dynamic messages |
+| `npm run test:vault-read` | Verify shared read-only decrypt and search |
+| `npm run test:cold-archive` | Verify arknote-cold-v1 pack/unpack |
+| `npm run android:keystore` | Generate a local Android release keystore and optionally set secrets |
+| `npm run reader` | Read-only CLI (list / search / show) |
+| `npm run mobile:dev` | Start the read-only mobile web debug server |
+| `npm run mobile:build` | Build the read-only mobile app for Capacitor sync |
 | `npm run brand:generate` | Regenerate brand assets from the SVG masters |
 
 ## Project Structure
@@ -167,10 +173,13 @@ scripts/                  Security, sync, recovery, updater, and asset tests
 
 ## Current Boundaries
 
-- Windows update packages are unsigned by default; configure code signing before public production distribution.
-- macOS has a local build configuration, but the current GitHub Actions workflow does not publish macOS packages.
+- Windows update packages are unsigned by default; set `WIN_CSC_LINK` / `WIN_CSC_KEY_PASSWORD` repository secrets for public distribution.
+- GitHub Actions builds macOS DMGs (not notarized by default); set `CSC_LINK` / `CSC_KEY_PASSWORD` to enable signing.
+- The same workflow builds the read-only Android APK. Sideload can use the debug build; for a stable release signature run `npm run android:keystore -- --set-secrets` (keystore stays in `~/.arknote-certs/`, never in git).
 - Linux DEB and RPM upgrades remain the responsibility of the system package manager.
-- The OSS settings are reserved for future work; Git is the current stable synchronization path.
+- Live sync is Git-only. Cold backup can test the connection and restore a local cold file into an empty data directory; credentials stay on-device.
+- Time capsule opens notes by month; editor `[[` links support keyboard completion.
+- Read-only clients: CLI in [`reader/README.md`](./reader/README.md); mobile app in [`mobile/README.md`](./mobile/README.md).
 
 ## Repository
 

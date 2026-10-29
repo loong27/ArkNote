@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { X, History, Clock, Save } from 'lucide-react'
+import { X, History, Clock, Save, GitCompare } from 'lucide-react'
 import { useStore } from '../../store/useStore'
 import { useI18n } from '../../i18n/I18nProvider'
 
@@ -10,20 +10,24 @@ export const VersionDialog: React.FC = () => {
     versionNoteId,
     closeVersionDialog,
     versions,
-    currentNote,
     isTrashNote,
     flushPendingSaves,
     openNoteWithoutFlush,
   } = useStore()
 
   const [previewContent, setPreviewContent] = useState<string | null>(null)
+  const [diffContent, setDiffContent] = useState<string | null>(null)
+  const [activeTimestamp, setActiveTimestamp] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [restoring, setRestoring] = useState(false)
+  const [mode, setMode] = useState<'preview' | 'diff'>('preview')
 
   const handlePreview = async (timestamp: string) => {
     if (!versionNoteId) return
-
     setLoading(true)
+    setActiveTimestamp(timestamp)
+    setMode('preview')
+    setDiffContent(null)
     try {
       const content = isTrashNote
         ? await window.electronAPI.trash.getVersion(versionNoteId, timestamp)
@@ -31,6 +35,21 @@ export const VersionDialog: React.FC = () => {
       setPreviewContent(content)
     } catch (error) {
       console.error('Failed to load version:', error)
+    }
+    setLoading(false)
+  }
+
+  const handleDiff = async (timestamp: string) => {
+    if (!versionNoteId || isTrashNote) return
+    setLoading(true)
+    setActiveTimestamp(timestamp)
+    setMode('diff')
+    try {
+      const result = await window.electronAPI.versions.diff(versionNoteId, timestamp)
+      setDiffContent(result.unified)
+      setPreviewContent(result.version)
+    } catch (error) {
+      console.error('Failed to diff version:', error)
     }
     setLoading(false)
   }
@@ -54,7 +73,6 @@ export const VersionDialog: React.FC = () => {
   }
 
   const formatTimestamp = (ts: string): string => {
-    // Parse the timestamp format: YYYY-MM-DDTHH-MM-SS-mmmZ
     try {
       const parts = ts.split(/[-T]/)
       if (parts.length >= 6) {
@@ -68,11 +86,13 @@ export const VersionDialog: React.FC = () => {
 
   if (!versionDialogOpen) return null
 
+  const panelContent = mode === 'diff' ? diffContent : previewContent
+
   return (
     <div className="dialog-overlay" onClick={closeVersionDialog}>
       <div
         className="dialog"
-        style={{ width: previewContent ? '800px' : '500px' }}
+        style={{ width: panelContent ? '860px' : '500px' }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="dialog-header">
@@ -82,6 +102,7 @@ export const VersionDialog: React.FC = () => {
           </h3>
           <button className="icon-btn" onClick={() => {
             setPreviewContent(null)
+            setDiffContent(null)
             closeVersionDialog()
           }}>
             <X size={18} strokeWidth={1.5} />
@@ -89,12 +110,11 @@ export const VersionDialog: React.FC = () => {
         </div>
 
         <div className="dialog-body" style={{ display: 'flex', gap: 16, minHeight: 300 }}>
-          {/* Version list */}
           <div style={{
-            width: previewContent ? '40%' : '100%',
+            width: panelContent ? '38%' : '100%',
             overflowY: 'auto',
-            borderRight: previewContent ? '1px solid var(--border)' : 'none',
-            paddingRight: previewContent ? 16 : 0,
+            borderRight: panelContent ? '1px solid var(--border)' : 'none',
+            paddingRight: panelContent ? 16 : 0,
           }}>
             {versions.length === 0 ? (
               <div className="empty-state">
@@ -106,13 +126,13 @@ export const VersionDialog: React.FC = () => {
               </div>
             ) : (
               <div className="version-list">
-                {versions.map((version, idx) => (
+                {versions.map((version) => (
                   <div
                     key={version.timestamp}
                     className="version-item"
-                    onClick={() => handlePreview(version.timestamp)}
+                    style={{ outline: activeTimestamp === version.timestamp ? '1px solid var(--accent)' : undefined }}
                   >
-                    <div className="version-info">
+                    <div className="version-info" onClick={() => handlePreview(version.timestamp)} style={{ cursor: 'pointer', flex: 1 }}>
                       <div className="version-time">
                         {formatTimestamp(version.timestamp)}
                       </div>
@@ -123,22 +143,39 @@ export const VersionDialog: React.FC = () => {
                     <span className={`version-badge ${version.isManual ? 'manual' : ''}`}>
                       {version.isManual ? t('手动保存') : t('自动保存')}
                     </span>
+                    {!isTrashNote && (
+                      <button
+                        className="icon-btn sm"
+                        title={t('对比差异')}
+                        onClick={() => void handleDiff(version.timestamp)}
+                      >
+                        <GitCompare size={14} />
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Version preview */}
-          {previewContent !== null && (
+          {panelContent !== null && (
             <div style={{ flex: 1, overflowY: 'auto' }}>
               <div style={{
                 fontSize: '12px',
                 color: 'var(--text-muted)',
                 marginBottom: 8,
                 fontWeight: 600,
+                display: 'flex',
+                gap: 8,
               }}>
-                {t('版本预览')}
+                <button className={`btn btn-sm ${mode === 'preview' ? 'btn-primary' : ''}`} onClick={() => setMode('preview')}>
+                  {t('版本预览')}
+                </button>
+                {!isTrashNote && (
+                  <button className={`btn btn-sm ${mode === 'diff' ? 'btn-primary' : ''}`} onClick={() => activeTimestamp && void handleDiff(activeTimestamp)}>
+                    {t('差异对比')}
+                  </button>
+                )}
               </div>
               <pre style={{
                 background: 'var(--bg-primary)',
@@ -153,7 +190,7 @@ export const VersionDialog: React.FC = () => {
                 maxHeight: '400px',
                 overflow: 'auto',
               }}>
-                {loading ? t('加载中...') : previewContent}
+                {loading ? t('加载中...') : panelContent}
               </pre>
             </div>
           )}
@@ -162,6 +199,7 @@ export const VersionDialog: React.FC = () => {
         <div className="dialog-footer">
           <button className="btn" onClick={() => {
             setPreviewContent(null)
+            setDiffContent(null)
             closeVersionDialog()
           }}>
             {t('关闭')}

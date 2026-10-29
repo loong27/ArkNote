@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.DS_Store
+*.log
+.idea/
+.vscode/
+
+# Native build outputs (keep platform projects)
+android/app/build/
+android/.gradle/
+android/build/
+android/local.properties
+android/captures/
+android/*.iml
+android/.idea/
+ios/App/Pods/
+ios/App/Podfile.lock
+ios/DerivedData/
+*.jks
+*.keystore

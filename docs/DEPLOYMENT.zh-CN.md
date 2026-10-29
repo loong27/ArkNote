@@ -148,7 +148,8 @@ git push origin v1.0.4
 1. 创建或复用对应的 GitHub Release
 2. 在 Ubuntu 构建 AppImage、DEB 和 RPM
 3. 在 Windows 构建 x64 与 ia32 NSIS 安装包
-4. 上传安装包、`latest*.yml` 和 blockmap
+4. 在 Ubuntu 构建只读 Android APK（有 `ANDROID_KEYSTORE_*` 则签名 release，否则为 debug 侧载包）
+5. 上传安装包、`latest*.yml`、blockmap 与 APK
 
 发布完成后必须检查 Release 中至少包含：
 
@@ -160,6 +161,7 @@ Windows installer(s)
 AppImage
 DEB
 RPM
+arkNote-Reader-*-android*.apk
 ```
 
 缺少 `latest*.yml` 时客户端无法发现更新；缺少 blockmap 时差分下载不可用；元数据中的 SHA-512 与实际安装包不一致时下载会被拒绝。
@@ -208,14 +210,18 @@ RPM
 
 ## 8. 代码签名
 
-当前默认安装包未签名。面向公众部署时应配置：
+当前默认桌面安装包未签名。面向公众部署时应配置：
 
 - Windows Authenticode 代码签名证书
 - macOS Developer ID Application 证书
 - macOS notarization 凭据
 - CI 中的证书和密码 Secrets
 
-不要把 `.p12`、`.pfx`、私钥或密码提交到仓库。仓库 `.gitignore` 已排除常见证书和私钥格式。
+Android Reader **侧载不强制正式签名**。需要固定签名时在根目录执行 `npm run android:keystore -- --set-secrets`，密钥保存在本机 `~/.arknote-certs/`，并写入 `ANDROID_KEYSTORE_*` Secrets。丢失 keystore 无法同签名升级。
+
+冷备份使用 S3 兼容 path-style（Endpoint/Bucket/对象键）。设置页可填充 AWS / R2 / MinIO / OSS / COS 示例，并支持测试连接、从本地 cold 文件恢复到**空**数据目录。
+
+不要把 `.p12`、`.pfx`、`.jks`、私钥或密码提交到仓库。仓库 `.gitignore` 已排除常见证书和私钥格式。
 
 自动更新使用 Release HTTPS 与 `latest*.yml` 中的 SHA-512 验证文件完整性，但这不能替代操作系统代码签名。
 

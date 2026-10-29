@@ -65,3 +65,5 @@ Desktop.ini
 *.pem
 *.key
 *.crt
+*.jks
+*.keystore
