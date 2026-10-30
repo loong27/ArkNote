@@ -2504,8 +2504,9 @@ html, body, #root {
   display: flex;
 }
 
+/* Preview pane is a flex shell; vertical scroll lives on the inner content column. */
 .note-preview-pane {
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .split-note-body {

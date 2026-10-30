@@ -195,7 +195,8 @@ export const NoteView: React.FC = () => {
     source: string
   } | null>(null)
   const previewRef = useRef<HTMLDivElement>(null)
-  const previewPaneRef = useRef<HTMLDivElement>(null)
+  /** Actual vertical scrollport for preview content (not the flex shell). */
+  const previewScrollRef = useRef<HTMLDivElement>(null)
   const editorViewRef = useRef<EditorView | null>(null)
   const [editorReadyTick, setEditorReadyTick] = useState(0)
   const [outline, setOutline] = useState<Array<{ level: number; text: string; line: number }>>([])
@@ -257,24 +258,48 @@ export const NoteView: React.FC = () => {
     if (!isSplitView) return
 
     const editorScroller = editorViewRef.current?.scrollDOM
-    const previewPane = previewPaneRef.current
-    if (!editorScroller || !previewPane) return
+    const previewScroller = previewScrollRef.current
+    if (!editorScroller || !previewScroller) return
 
     let syncing = false
     let rafId = 0
+    let activeSide: 'editor' | 'preview' | null = null
+    let clearActiveTimer = 0
+
+    const maxScroll = (el: HTMLElement) => el.scrollHeight - el.clientHeight
 
     const scrollRatio = (el: HTMLElement) => {
-      const max = el.scrollHeight - el.clientHeight
+      const max = maxScroll(el)
       return max <= 0 ? 0 : el.scrollTop / max
     }
 
     const applyRatio = (el: HTMLElement, ratio: number) => {
-      const max = el.scrollHeight - el.clientHeight
-      el.scrollTop = max <= 0 ? 0 : ratio * max
+      const max = maxScroll(el)
+      if (max <= 0) return
+      el.scrollTop = ratio * max
     }
 
-    const syncFrom = (source: HTMLElement, target: HTMLElement) => {
+    const markActive = (side: 'editor' | 'preview') => {
+      activeSide = side
+      if (clearActiveTimer) window.clearTimeout(clearActiveTimer)
+      clearActiveTimer = window.setTimeout(() => {
+        activeSide = null
+        clearActiveTimer = 0
+      }, 120)
+    }
+
+    const syncFrom = (
+      source: HTMLElement,
+      target: HTMLElement,
+      side: 'editor' | 'preview',
+    ) => {
       if (syncing) return
+      // Ignore echo from the opposite pane while this side is driving.
+      if (activeSide && activeSide !== side) return
+      // Non-scrollable source would report ratio 0 and yank the target to top.
+      if (maxScroll(source) <= 0) return
+
+      markActive(side)
       if (rafId) cancelAnimationFrame(rafId)
       rafId = requestAnimationFrame(() => {
         rafId = 0
@@ -288,16 +313,17 @@ export const NoteView: React.FC = () => {
       })
     }
 
-    const onEditorScroll = () => syncFrom(editorScroller, previewPane)
-    const onPreviewScroll = () => syncFrom(previewPane, editorScroller)
+    const onEditorScroll = () => syncFrom(editorScroller, previewScroller, 'editor')
+    const onPreviewScroll = () => syncFrom(previewScroller, editorScroller, 'preview')
 
     editorScroller.addEventListener('scroll', onEditorScroll, { passive: true })
-    previewPane.addEventListener('scroll', onPreviewScroll, { passive: true })
+    previewScroller.addEventListener('scroll', onPreviewScroll, { passive: true })
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId)
+      if (clearActiveTimer) window.clearTimeout(clearActiveTimer)
       editorScroller.removeEventListener('scroll', onEditorScroll)
-      previewPane.removeEventListener('scroll', onPreviewScroll)
+      previewScroller.removeEventListener('scroll', onPreviewScroll)
     }
   }, [isSplitView, editorReadyTick])
 
@@ -899,8 +925,8 @@ export const NoteView: React.FC = () => {
       if (!isTrashNote && syncedContent !== currentNote.content) {
         handleContentChange(syncedContent)
       }
-      if (noteChanged && previewPaneRef.current) {
-        previewPaneRef.current.scrollTop = 0
+      if (noteChanged && previewScrollRef.current) {
+        previewScrollRef.current.scrollTop = 0
       }
       return
     }
@@ -1174,8 +1200,11 @@ export const NoteView: React.FC = () => {
           </div>
         )}
         {showPreview && (
-          <div ref={previewPaneRef} className="note-preview-pane" style={{ display: 'flex', gap: 0 }}>
-            <div style={{ flex: 1, minWidth: 0, overflow: 'auto' }}>
+          <div className="note-preview-pane" style={{ display: 'flex', gap: 0 }}>
+            <div
+              ref={previewScrollRef}
+              style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: 'auto' }}
+            >
               <div
                 ref={previewRef}
                 className="markdown-preview"
@@ -1226,7 +1255,7 @@ export const NoteView: React.FC = () => {
           </div>
         )}
         <BackToTopButton
-          scrollRef={previewPaneRef}
+          scrollRef={previewScrollRef}
           enabled={showPreview}
           resetKey={currentNote.id}
         />
