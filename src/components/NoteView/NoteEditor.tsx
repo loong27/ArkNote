@@ -598,7 +598,7 @@ export const NoteEditor: React.FC<Props> = ({ content, onChange, onSave, onReady
   }, [])
 
   return (
-    <div style={{ position: 'relative', height: '100%', flex: 1, minHeight: 0 }}>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', overflow: 'hidden', width: '100%', height: '100%', flex: 1, minHeight: 0 }}>
       <div ref={containerRef} className="editor-container" />
       {wikiQuery !== null && wikiAnchor && (
         <div className="wiki-link-popup" style={{
